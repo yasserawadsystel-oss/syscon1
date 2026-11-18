@@ -1,41 +1,6 @@
 <!DOCTYPE html>
 <html lang="ar" dir="rtl">
 <head>
-<script>
-  (function forceClearCacheForAllUsers() {
-    // غيّر هذا الرقم في أي تحديث مستقبلي ليمسح الكاش عند كل اليوزرات تلقائياً
-    const CURRENT_APP_VERSION = 'SYSCON_V2026_11_18_03';
-    const savedVersion = localStorage.getItem('syscon_installed_version');
-
-    if (savedVersion !== CURRENT_APP_VERSION) {
-      // 1. مسح أي Service Workers مخزنة للنسخ القديمة
-      if ('serviceWorker' in navigator) {
-        navigator.serviceWorker.getRegistrations().then(function(registrations) {
-          for (let reg of registrations) {
-            reg.unregister();
-          }
-        });
-      }
-
-      // 2. مسح ملفات الكاش المخزنة في المتصفح (Cache API)
-      if ('caches' in window) {
-        caches.keys().then(function(names) {
-          for (let name of names) {
-            caches.delete(name);
-          }
-        });
-      }
-
-      // 3. تسجيل رقم الإصدار الجديد (مع الحفاظ على جلسة تسجيل الدخول)
-      localStorage.setItem('syscon_installed_version', CURRENT_APP_VERSION);
-
-      // 4. إعادة تحميل الصفحة من السيرفر مباشرة مرة واحدة
-      const url = new URL(window.location.href);
-      url.searchParams.set('v', CURRENT_APP_VERSION);
-      window.location.replace(url.toString());
-    }
-  })();
-</script>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0">
   <title>نظام إدارة وتصفيات سيستل للاتصالات | SYSCON</title>
@@ -23071,350 +23036,353 @@ window.addEventListener('DOMContentLoaded', () => {
     a.click();
   }
 </script>
-<!-- ========================================================================= -->
-<!-- الإصلاح النهائي: ربط مباشر مع Firebase + عزل الليدر + Access/Travel + PDF -->
-<!-- ========================================================================= -->
+<!-- ===================================================================== -->
+<!-- الحل الجذري لعزل تصفيات التيم ليدر (جروب التصفية) عن الإدارة الفنية -->
+<!-- وتوجيهها مباشرة إلى الـ COO ثم الطباعة بأثر رجعي وفوري -->
+<!-- ===================================================================== -->
 <script>
-(function applyRootFixesForSyscon() {
+  (function initActiveLeaderIsolationEngine() {
+    window.__leaderDirectIds = new Set();
+    window.__leaderDirectNumbers = new Set();
+    let knownLeaderNames = new Set();
+    let detectedArchiveStatus = 'TECHNICAL_APPROVED';
+    let detectedCooStatus = 'COO_APPROVED';
+    const DIRECT_TAG = 'مسار مباشر للـ COO';
 
-  function normArText(s) {
-    return String(s || '')
-      .replace(/^(م|مهندس|eng|تيم ليدر|ليدر|الليدر)[\.\s\/\-:]+/gi, '')
-      .replace(/[أإآ]/g, 'ا')
-      .replace(/ة/g, 'ه')
-      .replace(/ى/g, 'ي')
-      .replace(/\s+/g, ' ')
-      .trim()
-      .toLowerCase();
-  }
-
-  // 1. عزل تصفية التيم ليدر لنفسه فقط (عندما يكون الليدر هو نفسه مُرسل التصفية)
-  window.isTeamLeaderSelfClearance = function(s) {
-    if (!s || typeof s !== 'object') return false;
-    const leader = normArText(s.teamLeader || s.leaderName || s.leader || '');
-    const eng = normArText(s.submittedByEngineer || s.engineerName || s.engineer || '');
-    if (!leader || !eng || leader.length < 3) return false;
-    return (eng === leader);
-  };
-
-  // 2. دالة رسم جدول الإدارة الفنية مباشرة من القائمة الحية
-  function drawTechTableFromList(allSheets) {
-    if (typeof ensureTechnicalViewSectionCreated === 'function') ensureTechnicalViewSectionCreated();
-    const searchQ = (document.getElementById('techFilterSearch')?.value || '').toLowerCase().trim();
-    const deptF = document.getElementById('techFilterDept')?.value || 'ALL';
-
-    // استبعاد تصفيات التيم ليدر لنفسه فقط
-    const validForTechSheets = allSheets.filter(s => !window.isTeamLeaderSelfClearance(s));
-
-    // أ) وارد الفحص: معتمدة من الليدر (APPROVED أو COO_APPROVED أو isApproved أو توقيع) ولم تُعتمد فنياً + المرتجعة للتعديل
-    const inboxList = validForTechSheets.filter(s => {
-      const st = String(s.status || '').toUpperCase().trim();
-      const isLeaderAppr = st === 'APPROVED' || st === 'COO_APPROVED' || s.isApproved === true || Boolean(s.signatureData);
-      const isReturnedTech = s.isReturnedByTechnical === true || Boolean(s.technicalReturnReason);
-      return (isLeaderAppr && s.technicalApproved !== true) || isReturnedTech;
-    });
-
-    // ب) الأرشيف الفني: المعتمدة فنياً فقط
-    const archiveList = validForTechSheets.filter(s =>
-      s.technicalApproved === true && !s.isReturnedByTechnical
-    );
-
-    const setTxt = (id, v) => { const el = document.getElementById(id); if (el) el.innerText = v; };
-    setTxt('techStatInboxCount', inboxList.length);
-    setTxt('techStatArchiveCount', archiveList.length);
-    setTxt('techBadgeInboxTab', inboxList.length);
-    setTxt('techBadgeArchiveTab', archiveList.length);
-
-    let totalTechCount = 0;
-    archiveList.forEach(s => {
-      let members = Array.isArray(s.teamMembers) ? s.teamMembers : String(s.teamMembers || '').split(/[,،\n]/).filter(Boolean);
-      totalTechCount += members.length;
-    });
-    setTxt('techStatTotalTechnicians', totalTechCount);
-
-    const sourceList = window.currentTechSubTab === 'ARCHIVE' ? archiveList : inboxList;
-
-    const filtered = sourceList.filter(s => {
-      if (deptF !== 'ALL' && s.department !== deptF) return false;
-      if (searchQ) {
-        const fullTitle = typeof getClearanceFullDisplayName === 'function' ? getClearanceFullDisplayName(s) : s.siteName;
-        const text = `${fullTitle} ${s.siteName} ${s.department} ${s.submittedByEngineer} ${s.teamLeader} ${s.teamMembers}`.toLowerCase();
-        if (!text.includes(searchQ)) return false;
-      }
-      return true;
-    });
-
-    setTxt('techTableCountBadge', `${filtered.length} استمارة`);
-
-    const tbody = document.getElementById('techTableBody');
-    const emptyEl = document.getElementById('techTableEmptyState');
-    if (!tbody || !emptyEl) return;
-
-    if (filtered.length === 0) {
-      tbody.innerHTML = '';
-      emptyEl.classList.remove('hidden');
-      return;
+    function normAr(s) {
+      if (!s) return '';
+      return String(s)
+        .replace(/^(م|مهندس|eng|تيم ليدر|ليدر)[\.\s\/\-:]+/gi, '')
+        .replace(/[أإآ]/g, 'ا')
+        .replace(/ة/g, 'ه')
+        .replace(/ى/g, 'ي')
+        .replace(/\s+/g, ' ')
+        .trim()
+        .toLowerCase();
     }
 
-    emptyEl.classList.add('hidden');
-    tbody.innerHTML = filtered.map(s => {
-      const fullTitle = typeof getClearanceFullDisplayName === 'function' ? getClearanceFullDisplayName(s) : s.siteName;
-      const isArchived = s.technicalApproved === true && !s.isReturnedByTechnical;
-      const isReturnedTech = s.isReturnedByTechnical === true || Boolean(s.technicalReturnReason);
+    // استخراج كل النصوص الموجودة في جروب التصفية / المهندسين
+    function extractGroupTextFromSheet(d) {
+      if (!d || typeof d !== 'object') return '';
+      const groupKeys = [
+        'group', 'clearanceGroup', 'workGroup', 'teamGroup', 'groupName',
+        'groupMembers', 'groupNames', 'teamMembers', 'members', 'participants',
+        'workers', 'technicians', 'engineers', 'engineerName', 'engineer',
+        'engineersList', 'submittedByEngineer', 'submittedBy', 'createdBy',
+        'createdByName', 'userName', 'employeeName', 'names'
+      ];
 
-      let membersList = Array.isArray(s.teamMembers)
-        ? s.teamMembers
-        : String(s.teamMembers || '').split(/[,،\n]/).map(x => x.trim()).filter(Boolean);
-      if (membersList.length === 0 && s.submittedByEngineer) membersList = [s.submittedByEngineer];
+      const parts = [];
+      for (const [k, v] of Object.entries(d)) {
+        const lowerKey = k.toLowerCase();
+        const isGroupKey = groupKeys.includes(k) ||
+          lowerKey.includes('group') ||
+          lowerKey.includes('engineer') ||
+          lowerKey.includes('member') ||
+          k.includes('جروب') ||
+          k.includes('مهندس');
 
-      const membersBadges = membersList.map(m =>
-        `<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-slate-950 border border-slate-700 text-slate-200 text-[10.5px] m-0.5 font-bold">👷‍♂️ ${escapeHtmlSafe(m)}</span>`
-      ).join('');
+        if (!isGroupKey || !v) continue;
 
-      let statusHtml = '';
-      if (isArchived) {
-        statusHtml = `<span class="px-2.5 py-1 rounded-full text-[11px] font-bold bg-emerald-950 text-emerald-300 border border-emerald-700">✓ معتمد فني (${escapeHtmlSafe(s.technicalApprovalDate || '')})</span>`;
-      } else if (isReturnedTech) {
-        statusHtml = `
-          <div class="space-y-1">
-            <span class="px-2.5 py-1 rounded-full text-[11px] font-black bg-amber-950 text-amber-300 border border-amber-500 inline-block">🔄 تم إرجاعها للتعديل</span>
-            ${s.technicalReturnReason ? `<div class="text-[10px] text-rose-300 font-bold">السبب: ${escapeHtmlSafe(s.technicalReturnReason)}</div>` : ''}
-          </div>`;
-      } else {
-        statusHtml = `<span class="px-2.5 py-1 rounded-full text-[11px] font-bold bg-cyan-950 text-cyan-300 border border-cyan-700">⏳ بانتظار الادارة الفنية</span>`;
-      }
-
-      const actionsHtml = `
-        <div class="flex items-center justify-center gap-1.5">
-          <button onclick="openClearanceReview('${s.id}', true)" class="sys-btn-sm bg-blue-600 hover:bg-blue-500 text-white font-black cursor-pointer shadow">
-            ${isArchived ? '📄 عرض' : '🔍 فحص واعتماد التصفية'}
-          </button>
-          ${isArchived ? `<button onclick="printDirectClearance('${s.id}')" class="sys-btn-sm bg-sky-700 hover:bg-sky-600 text-white cursor-pointer">🖨️ طباعة</button>` : ''}
-        </div>`;
-
-      return `
-        <tr class="hover:bg-slate-800/40 ${isReturnedTech ? 'bg-amber-950/15' : ''}">
-          <td class="py-3 px-4 font-bold text-white font-mono">${escapeHtmlSafe(fullTitle)}<div class="text-[10px] text-slate-400 font-mono">${escapeHtmlSafe(s.region || '-')}</div></td>
-          <td class="py-3 px-4 text-cyan-300 font-bold">${escapeHtmlSafe(s.department || '-')}<div class="text-[10px] text-slate-400">${escapeHtmlSafe(s.activityType || '-')}</div></td>
-          <td class="py-3 px-4">
-            <div class="font-bold text-amber-300">👔 ${escapeHtmlSafe(s.teamLeader || '-')}</div>
-            <div class="text-[10px] text-slate-300">👷‍♂️ ${escapeHtmlSafe(s.submittedByEngineer || '-')}</div>
-          </td>
-          <td class="py-3 px-4 max-w-xs">${membersBadges}</td>
-          <td class="py-3 px-4 font-mono text-[11px] text-slate-300">${escapeHtmlSafe(s.startDate || '-')} ⬅️ ${escapeHtmlSafe(s.endDate || '-')}</td>
-          <td class="py-3 px-4">${statusHtml}</td>
-          <td class="py-3 px-4 text-center">${actionsHtml}</td>
-        </tr>
-      `;
-    }).join('');
-  }
-
-  // مستمع حي ومباشر من Firebase يغذّي جدول الإدارة الفنية فوراً دون انتظار أي متغير خارجي
-  let liveTechSheetsCache = [];
-  if (typeof db !== 'undefined') {
-    db.collection("clearance_sheets").onSnapshot(snap => {
-      const list = [];
-      snap.forEach(doc => list.push({ id: doc.id, ...doc.data() }));
-      list.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
-      liveTechSheetsCache = list;
-      window.cachedClearancesList = list;
-      drawTechTableFromList(liveTechSheetsCache);
-    });
-  }
-
-  window.renderTechnicalDashboard = function() {
-    if (liveTechSheetsCache.length > 0) {
-      drawTechTableFromList(liveTechSheetsCache);
-    } else if (typeof db !== 'undefined') {
-      db.collection("clearance_sheets").get().then(snap => {
-        const list = [];
-        snap.forEach(doc => list.push({ id: doc.id, ...doc.data() }));
-        list.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
-        liveTechSheetsCache = list;
-        window.cachedClearancesList = list;
-        drawTechTableFromList(liveTechSheetsCache);
-      });
-    }
-  };
-
-  // 3. إرجاع التصفية من الإدارة الفنية مع إبقائها ظاهرة بحالة "تم إرجاعها للتعديل"
-  window.returnTechnicalClearanceToLeader = async function(sheetId) {
-    if (!sheetId || typeof db === 'undefined') return;
-    const sheet = liveTechSheetsCache.find(s => s.id === sheetId) || window.currentReviewItem;
-    if (!sheet) return;
-
-    const fullTitle = typeof getClearanceFullDisplayName === 'function' ? getClearanceFullDisplayName(sheet) : sheet.siteName;
-    const reason = prompt(`⚠️ سبب إرجاع التصفية (${fullTitle}) للتعديل:`);
-    if (reason === null) return;
-    if (!reason.trim()) return alert("يجب كتابة سبب الإرجاع.");
-
-    const techRejecter = (window.currentUser && window.currentUser.name) ? window.currentUser.name : 'الإدارة الفنية';
-
-    try {
-      await db.collection("clearance_sheets").doc(sheetId).update({
-        status: "PENDING",
-        isApproved: false,
-        signatureData: null,
-        technicalApproved: false,
-        isReturnedByTechnical: true,
-        technicalReturnReason: reason.trim(),
-        technicalReturnedBy: techRejecter,
-        technicalReturnedAt: Date.now()
-      });
-
-      if (typeof sendTeamLeaderNotification === 'function') {
-        sendTeamLeaderNotification(
-          sheet.id, fullTitle, sheet.teamLeader || "", sheet.teamLeaderEmail || "", sheet.teamLeaderId || "",
-          "⚠️ تم إرجاعها للتعديل من الإدارة الفنية",
-          `أعادت الإدارة الفنية استمارة (${fullTitle}) للتعديل. السبب: "${reason.trim()}"`
-        );
-      }
-
-      alert(`🔄 تم إرجاع التصفية (${fullTitle}) للتعديل وتحديث حالتها في الإدارة الفنية.`);
-      if (typeof closeClearanceModal === 'function') closeClearanceModal();
-    } catch (err) {
-      alert("خطأ: " + err.message);
-    }
-  };
-
-  // 4. خانتي Access و Travel في بوكس التصفية والورقة والطباعة
-  function fixActivityDropdownAndTerms() {
-    const actSel = document.getElementById('engActivityType');
-    if (actSel) {
-      Array.from(actSel.options).forEach(opt => {
-        if (opt.value === 'Downgrade' || opt.text.toLowerCase().includes('downgrade')) {
-          opt.value = 'Access';
-          opt.text = 'Access';
-        }
-        if (opt.value === 'On Air' || opt.text.toLowerCase().includes('on air')) {
-          opt.value = 'Travel';
-          opt.text = 'Travel';
-        }
-      });
-      if (!Array.from(actSel.options).some(o => o.value === 'Travel')) {
-        const optTravel = document.createElement('option');
-        optTravel.value = 'Travel';
-        optTravel.text = 'Travel';
-        actSel.appendChild(optTravel);
-      }
-      if (!Array.from(actSel.options).some(o => o.value === 'Access')) {
-        const optAccess = document.createElement('option');
-        optAccess.value = 'Access';
-        optAccess.text = 'Access';
-        actSel.appendChild(optAccess);
-      }
-    }
-
-    document.querySelectorAll('#printableSheet th, #printableSheet td').forEach(cell => {
-      if (cell.children.length === 0) {
-        const txt = cell.textContent.trim();
-        if (/^downgrade$/i.test(txt) || txt === 'داون جريد' || txt === 'دوان جريد') {
-          cell.textContent = 'Access';
-        } else if (/^on\s*air$/i.test(txt) || txt === 'أون إير' || txt === 'اون اير') {
-          cell.textContent = 'Travel';
+        if (typeof v === 'string') {
+          parts.push(v);
+        } else if (Array.isArray(v)) {
+          v.forEach(item => {
+            if (typeof item === 'string') parts.push(item);
+            else if (item && typeof item === 'object') {
+              parts.push(item.name || item.engineerName || item.userName || '');
+            }
+          });
         }
       }
-    });
-  }
 
-  const _origOpenReviewForAct = window.openClearanceReview;
-  window.openClearanceReview = function(docId, isReadOnly = false) {
-    if (typeof _origOpenReviewForAct === 'function') _origOpenReviewForAct(docId, isReadOnly);
-    fixActivityDropdownAndTerms();
-
-    const sheet = liveTechSheetsCache.find(s => s.id === docId) || window.currentReviewItem;
-    if (!sheet) return;
-
-    const act = String(sheet.activityType || '').toLowerCase();
-    const cellDowngrade = document.getElementById('act_downgrade');
-    const cellOnAir = document.getElementById('act_onair');
-
-    if (cellDowngrade && (act.includes('access') || act.includes('downgrade'))) cellDowngrade.innerText = 'OK';
-    if (cellOnAir && (act.includes('travel') || act.includes('onair') || act.includes('on air'))) cellOnAir.innerText = 'OK';
-
-    const boxTech = document.getElementById('boxTechStamp');
-    if (boxTech && window.isTeamLeaderSelfClearance(sheet)) {
-      boxTech.style.setProperty('display', 'none', 'important');
+      return normAr(parts.join(' | '));
     }
-  };
 
-  setInterval(fixActivityDropdownAndTerms, 600);
+    // التحقق هل اسم الليدر موجود داخل نص جروب التصفية
+    function isNameInsideGroup(leaderNorm, groupTextNorm) {
+      if (!leaderNorm || !groupTextNorm || leaderNorm.length < 3) return false;
+      if (groupTextNorm === leaderNorm) return true;
 
-  // 5. تحميل الـ PDF الكامل بدون صفحة فارغة
-  window.downloadSheetPDF = async function() {
-    const original = document.getElementById('printableSheet');
-    if (!original) return alert("⚠️ لم يتم العثور على استمارة التصفية.");
+      // تقسيم جروب التصفية لو كان يحتوي على عدة أسماء
+      const tokens = groupTextNorm.split(/[\|\,،\-\+\/\n&\(\)]+/).map(t => normAr(t)).filter(Boolean);
+      if (tokens.includes(leaderNorm)) return true;
 
-    const sheet = window.currentReviewItem;
-    const site = (document.getElementById('m_siteName')?.value || sheet?.siteName || 'Site').trim();
-    const code = (typeof getFormattedSheetCode === 'function' && sheet)
-      ? getFormattedSheetCode(sheet)
-      : (document.getElementById('m_sheetCodeTop')?.innerText || 'SYS-0000').trim();
-    const pdfFileName = `${site} - ${code} - SYSCON.pdf`;
+      // لو اسم الليدر ثنائي أو أكثر نبحث عن وجوده داخل النص
+      if (leaderNorm.includes(' ') && groupTextNorm.includes(leaderNorm)) return true;
 
-    document.body.classList.remove('user-print-blocked');
+      return false;
+    }
 
-    const stage = document.createElement('div');
-    stage.style.cssText = 'position:fixed;top:0;left:0;width:1020px;background:#ffffff;color:#000000;z-index:2147483647;padding:12px;margin:0;direction:rtl;opacity:1;visibility:visible;';
+    // فحص شامل: هل التصفية تخص التيم ليدر (هو في جروب التصفية)؟
+    window.isLeaderSelfSheetGlobal = function(d) {
+      if (!d || typeof d !== 'object') return false;
 
-    const clone = original.cloneNode(true);
-    clone.style.cssText = 'width:980px !important;min-width:980px !important;max-width:980px !important;margin:0 auto !important;padding:14px 18px !important;background:#ffffff !important;color:#000000 !important;direction:rtl !important;zoom:1 !important;transform:none !important;border:1.5px solid #1e293b !important;visibility:visible !important;opacity:1 !important;';
-
-    const origInputs = original.querySelectorAll('input');
-    const cloneInputs = clone.querySelectorAll('input');
-    origInputs.forEach((inp, idx) => {
-      if (cloneInputs[idx]) {
-        const span = document.createElement('div');
-        span.innerText = inp.value || '';
-        span.style.cssText = 'display:block;width:100%;font-weight:800;color:#000000;text-align:center;font-family:"Cairo",Tahoma,Arial,sans-serif;font-size:11px;visibility:visible;';
-        cloneInputs[idx].parentNode.replaceChild(span, cloneInputs[idx]);
+      if (
+        d.isLeaderDirect === true ||
+        d.sheetType === 'LEADER_DIRECT' ||
+        d.isExcludedFromTechnical === true ||
+        d.technicalApprovedBy === DIRECT_TAG
+      ) {
+        return true;
       }
-    });
 
-    clone.querySelectorAll('th, td').forEach(cell => {
-      if (cell.children.length === 0) {
-        const t = cell.textContent.trim();
-        if (/^downgrade$/i.test(t) || t === 'داون جريد') cell.textContent = 'Access';
-        if (/^on\s*air$/i.test(t) || t === 'أون إير') cell.textContent = 'Travel';
+      const groupText = extractGroupTextFromSheet(d);
+      const sheetLeader = normAr(d.teamLeader || d.leaderName || d.submittedByLeader || d.leader || '');
+
+      // 1. هل التيم ليدر المكتوب في التصفية موجود ضمن جروب التصفية؟
+      if (sheetLeader && isNameInsideGroup(sheetLeader, groupText)) {
+        return true;
       }
-    });
 
-    if (sheet && window.isTeamLeaderSelfClearance(sheet)) {
-      const cTech = clone.querySelector('#boxTechStamp');
-      if (cTech) cTech.remove();
+      // 2. هل أي تيم ليدر مسجل في النظام موجود ضمن جروب التصفية؟
+      for (const lName of knownLeaderNames) {
+        if (isNameInsideGroup(lName, groupText)) {
+          return true;
+        }
+      }
+
+      return false;
+    };
+
+    // تحديث لوحة الاسترجاع اليدوية لتعمل بنفس المسار الجديد
+    const origApplyRecovery = window.applyAllRecoveryChanges;
+    window.applyAllRecoveryChanges = async function() {
+      if (!confirm('هل أنت متأكد من تطبيق هذه التعديلات واسترجاع كل التصفيات لأماكنها؟')) return;
+      const firestoreDb = window.db || (typeof db !== 'undefined' ? db : null) || (window.firebase && firebase.firestore());
+      const btn = document.getElementById('btnApplyRecovery');
+      if (btn) { btn.disabled = true; btn.innerText = '⏳ جاري الحفظ...'; }
+
+      try {
+        for (let i = 0; i < recoveryRows.length; i += 400) {
+          const chunk = recoveryRows.slice(i, i + 400);
+          const batch = firestoreDb.batch();
+
+          chunk.forEach(row => {
+            const ref = firestoreDb.collection('clearance_sheets').doc(row.id);
+            const orig = rawBackupData.find(x => x.id === row.id) || {};
+            const isCooDone = Boolean(orig.cooApproved === true || orig.cooApprovedBy);
+
+            if (row.target === 'INBOX') {
+              batch.update(ref, {
+                sheetType: 'NORMAL',
+                isLeaderDirect: false,
+                isExcludedFromTechnical: false,
+                technicalApproved: false,
+                technicalApprovedBy: null,
+                readyForPrintAndAccounts: false,
+                status: detectedInboxStatus
+              });
+            } else if (row.target === 'ARCHIVE') {
+              batch.update(ref, {
+                sheetType: 'NORMAL',
+                isLeaderDirect: false,
+                isExcludedFromTechnical: false,
+                technicalApproved: true,
+                technicalApprovedBy: row.approver || 'الإدارة الفنية',
+                readyForPrintAndAccounts: isCooDone,
+                status: isCooDone ? detectedCooStatus : detectedArchiveStatus
+              });
+            } else if (row.target === 'LEADER_DIRECT') {
+              batch.update(ref, {
+                sheetType: 'LEADER_DIRECT',
+                isLeaderDirect: true,
+                isExcludedFromTechnical: true,
+                technicalApproved: true,
+                technicalApprovedBy: DIRECT_TAG,
+                readyForPrintAndAccounts: isCooDone,
+                status: isCooDone ? detectedCooStatus : detectedArchiveStatus
+              });
+            }
+          });
+          await batch.commit();
+        }
+        alert('✅ تم تحديث المسارات وعزل تصفيات التيم ليدر عن الإدارة الفنية بنجاح!');
+        location.reload();
+      } catch (err) {
+        alert('❌ خطأ: ' + err.message);
+        if (btn) { btn.disabled = false; btn.innerText = '✅ تنفيذ واسترجاع الكل الآن'; }
+      }
+    };
+
+    // المزامنة النشطة مع قاعدة البيانات وتصحيح التصفيات القديمة والجديدة فوراً
+    async function syncAndFixLeaderSheets() {
+      const firestoreDb = window.db || (typeof db !== 'undefined' ? db : null) || (window.firebase && firebase.firestore());
+      if (!firestoreDb) return false;
+
+      try {
+        // 1. جلب أسماء التيم ليدرز من جدول الحسابات
+        try {
+          const uSnap = await firestoreDb.collection('user_accounts').get();
+          uSnap.forEach(doc => {
+            const ud = doc.data();
+            const r = String(ud.role || ud.userRole || ud.jobTitle || '').toLowerCase();
+            if (r.includes('leader') || r.includes('تيم') || r.includes('ليدر') || r.includes('مشرف')) {
+              const n = normAr(ud.name || ud.userName);
+              if (n.length >= 3) knownLeaderNames.add(n);
+            }
+          });
+        } catch (e) {}
+
+        // 2. مراقبة التصفيات وتصحيح مسار تصفية التيم ليدر تلقائياً
+        firestoreDb.collection('clearance_sheets').onSnapshot(async (snap) => {
+          const toFixInDb = [];
+
+          snap.forEach(doc => {
+            const d = doc.data();
+            const l = normAr(d.teamLeader || d.leaderName || d.leader || '');
+            if (l.length >= 3) knownLeaderNames.add(l);
+
+            if (d.technicalApproved === true && d.technicalApprovedBy && d.technicalApprovedBy !== DIRECT_TAG && !d.cooApproved && d.status) {
+              detectedArchiveStatus = d.status;
+            }
+            if (d.cooApproved === true && d.status) {
+              detectedCooStatus = d.status;
+            }
+          });
+
+          snap.forEach(doc => {
+            const d = doc.data();
+            if (window.isLeaderSelfSheetGlobal(d)) {
+              window.__leaderDirectIds.add(doc.id);
+              if (d.sheetNumber) window.__leaderDirectNumbers.add(String(d.sheetNumber).trim());
+
+              const isCooDone = Boolean(d.cooApproved === true || d.cooApprovedBy);
+              const expectedStatus = isCooDone ? detectedCooStatus : detectedArchiveStatus;
+
+              // إذا كانت التصفية في وارد الفحص (false) أو بدون وسم المسار المباشر، نصححها فوراً
+              if (
+                d.technicalApproved !== true ||
+                d.technicalApprovedBy !== DIRECT_TAG ||
+                d.isLeaderDirect !== true ||
+                d.isExcludedFromTechnical !== true ||
+                d.status !== expectedStatus
+              ) {
+                toFixInDb.push({ id: doc.id, isCooDone, expectedStatus });
+              }
+            }
+          });
+
+          cleanTechnicalDepartmentUI();
+
+          if (toFixInDb.length > 0) {
+            for (let i = 0; i < toFixInDb.length; i += 400) {
+              const chunk = toFixInDb.slice(i, i + 400);
+              const batch = firestoreDb.batch();
+              chunk.forEach(item => {
+                const ref = firestoreDb.collection('clearance_sheets').doc(item.id);
+                batch.update(ref, {
+                  sheetType: 'LEADER_DIRECT',
+                  isLeaderDirect: true,
+                  isExcludedFromTechnical: true,
+                  technicalApproved: true,
+                  technicalApprovedBy: DIRECT_TAG,
+                  readyForPrintAndAccounts: item.isCooDone,
+                  status: item.expectedStatus
+                });
+              });
+              await batch.commit();
+            }
+          }
+        });
+
+        return true;
+      } catch (e) {
+        return false;
+      }
     }
 
-    clone.querySelectorAll('.no-print, #expenseEditActionToolbar, #thDeleteExpenseCol, #tdDeleteExpenseFooter').forEach(el => el.remove());
+    // تحديد هل الشاشة المفتوحة حالياً أو الجدول يخص الإدارة الفنية (وارد الفحص / الأرشيف الفني)
+    function isInsideTechnicalView(el) {
+      if (!el) return false;
+      if (el.closest('#sysconRecoveryModal, #actionDateFilterModal')) return false;
 
-    stage.appendChild(clone);
-    document.body.appendChild(stage);
-    await new Promise(r => setTimeout(r, 300));
+      // فحص الحاوية الأب للجدول أو الكارت
+      let curr = el;
+      while (curr && curr !== document.body) {
+        const idCls = ((curr.id || '') + ' ' + (curr.className || '')).toLowerCase();
+        if (idCls.includes('coo') || idCls.includes('print') || idCls.includes('account')) return false;
+        if (idCls.includes('tech') || idCls.includes('archive') || idCls.includes('inbox')) return true;
 
-    try {
-      await html2pdf().set({
-        margin: [6, 6, 6, 6],
-        filename: pdfFileName,
-        image: { type: 'jpeg', quality: 0.98 },
-        html2canvas: { scale: 2, useCORS: true, backgroundColor: '#ffffff', width: 1020, windowWidth: 1020, scrollX: 0, scrollY: 0 },
-        jsPDF: { unit: 'mm', format: 'a4', orientation: 'landscape' }
-      }).from(stage).save();
-    } catch (err) {
-      alert("حدث خطأ أثناء تحميل PDF: " + err.message);
-    } finally {
-      stage.remove();
+        // فحص عنوان القسم القريب
+        const heading = curr.querySelector && curr.querySelector('h1, h2, h3, h4, .section-title, .card-title');
+        if (heading) {
+          const hText = heading.innerText || '';
+          if (hText.includes('الأرشيف الفني') || hText.includes('الارشيف الفني') || hText.includes('وارد الفحص') || hText.includes('الإدارة الفنية') || hText.includes('الادارة الفنية')) {
+            return true;
+          }
+          if (hText.includes('COO') || hText.includes('الطباعة') || hText.includes('الحسابات')) {
+            return false;
+          }
+        }
+        curr = curr.parentElement;
+      }
+
+      // فحص التبويب النشط حالياً في الصفحة
+      const activeTabs = Array.from(document.querySelectorAll('.active, [aria-selected="true"], .bg-blue-600, .bg-sky-600, .bg-indigo-600, .selected'));
+      for (const tab of activeTabs) {
+        const t = (tab.innerText || '').trim();
+        if (t.includes('الأرشيف الفني') || t.includes('الارشيف الفني') || t.includes('وارد الفحص') || t.includes('الإدارة الفنية') || t.includes('الادارة الفنية') || t.includes('الفحص الفني')) {
+          return true;
+        }
+      }
+
+      return false;
     }
-  };
 
-  window.printOfficialClearanceSheet = window.downloadSheetPDF;
-  window.generatePerfectClearanceDocument = window.downloadSheetPDF;
-  window.printDirectClearance = function(docId) {
-    if (typeof window.openClearanceReview === 'function') {
-      window.openClearanceReview(docId, true);
-      setTimeout(() => { window.downloadSheetPDF(); }, 400);
+    // إخفاء تصفيات التيم ليدر وفلاترها من شاشات الإدارة الفنية نهائياً
+    function cleanTechnicalDepartmentUI() {
+      // 1. إخفاء وسم "مسار مباشر للـ COO" من قوائم وأزرار فلترة المستخدمين في الأرشيف الفني
+      document.querySelectorAll('option, button, span, div, li').forEach(el => {
+        if (el.children.length === 0 && (el.innerText || '').trim().includes(DIRECT_TAG)) {
+          if (el.tagName === 'OPTION' || el.tagName === 'BUTTON' || isInsideTechnicalView(el)) {
+            el.style.display = 'none';
+          } else {
+            // في شاشة الـ COO والطباعة يظهر كاعتماد مباشر نظيف
+            el.innerText = el.innerText.replace(DIRECT_TAG, 'مباشر للـ COO');
+          }
+        }
+      });
+
+      // 2. إخفاء الصفوف والكروت من جدول وارد الفحص والأرشيف الفني
+      const candidates = document.querySelectorAll('tr, .card, .sheet-card, .clearance-item, [data-id], [data-sheet-id]');
+      candidates.forEach(row => {
+        if (row.closest('thead') || row.closest('#sysconRecoveryModal') || row.closest('#actionDateFilterModal')) return;
+
+        const text = row.innerText || '';
+        const dataId = row.getAttribute('data-id') || row.getAttribute('data-sheet-id') || '';
+
+        let isLeaderRow = text.includes(DIRECT_TAG) || (dataId && window.__leaderDirectIds.has(dataId));
+
+        if (!isLeaderRow && window.__leaderDirectNumbers.size > 0) {
+          for (const num of window.__leaderDirectNumbers) {
+            if (num && text.includes(num)) {
+              isLeaderRow = true;
+              break;
+            }
+          }
+        }
+
+        if (isLeaderRow && isInsideTechnicalView(row)) {
+          row.style.setProperty('display', 'none', 'important');
+        }
+      });
     }
-  };
 
-})();
+    // تشغيل المزامنة والماسح البصري المستمر
+    const bootTimer = setInterval(async () => {
+      if (await syncAndFixLeaderSheets()) {
+        clearInterval(bootTimer);
+      }
+    }, 400);
+
+    setInterval(cleanTechnicalDepartmentUI, 350);
+
+    const observer = new MutationObserver(() => cleanTechnicalDepartmentUI());
+    if (document.body) {
+      observer.observe(document.body, { childList: true, subtree: true });
+    }
+  })();
 </script>
 </body>
 </html>
