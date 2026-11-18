@@ -4,7 +4,7 @@
 <script>
   (function forceClearCacheForAllUsers() {
     // غيّر هذا الرقم في أي تحديث مستقبلي ليمسح الكاش عند كل اليوزرات تلقائياً
-    const CURRENT_APP_VERSION = 'SYSCON_V2026_11_18_01';
+    const CURRENT_APP_VERSION = 'SYSCON_V2026_11_18_03';
     const savedVersion = localStorage.getItem('syscon_installed_version');
 
     if (savedVersion !== CURRENT_APP_VERSION) {
@@ -23072,7 +23072,7 @@ window.addEventListener('DOMContentLoaded', () => {
   }
 </script>
 <!-- ========================================================================= -->
-<!-- الإصلاح النهائي: إظهار داتا الإدارة الفنية + عزل الليدر الحقيقي + PDF -->
+<!-- الإصلاح النهائي: ربط مباشر مع Firebase + عزل الليدر + Access/Travel + PDF -->
 <!-- ========================================================================= -->
 <script>
 (function applyRootFixesForSyscon() {
@@ -23088,33 +23088,25 @@ window.addEventListener('DOMContentLoaded', () => {
       .toLowerCase();
   }
 
-  // 1. عزل تصفية التيم ليدر لنفسه فقط (عندما يكون الليدر هو نفسه المهندس مُقدّم التصفية وليس معه مهندس موقع آخر)
+  // 1. عزل تصفية التيم ليدر لنفسه فقط (عندما يكون الليدر هو نفسه مُرسل التصفية)
   window.isTeamLeaderSelfClearance = function(s) {
     if (!s || typeof s !== 'object') return false;
-    if (s.sheetType === 'LEADER_DIRECT' && s.isLeaderDirect === true && !s.hasFieldEngineer) {
-      return true;
-    }
     const leader = normArText(s.teamLeader || s.leaderName || s.leader || '');
     const eng = normArText(s.submittedByEngineer || s.engineerName || s.engineer || '');
     if (!leader || !eng || leader.length < 3) return false;
-    // تُعزل فقط إذا كان مُرسل التصفية هو التيم ليدر نفسه
     return (eng === leader);
   };
 
-  // 2. إصلاح عرض الداتا في لوحة الإدارة الفنية (وارد الفحص + الأرشيف الفني + المرتجع)
-  window.renderTechnicalDashboard = function() {
+  // 2. دالة رسم جدول الإدارة الفنية مباشرة من القائمة الحية
+  function drawTechTableFromList(allSheets) {
     if (typeof ensureTechnicalViewSectionCreated === 'function') ensureTechnicalViewSectionCreated();
     const searchQ = (document.getElementById('techFilterSearch')?.value || '').toLowerCase().trim();
     const deptF = document.getElementById('techFilterDept')?.value || 'ALL';
 
-    const allSheets = (typeof cachedClearancesList !== 'undefined' && Array.isArray(cachedClearancesList))
-      ? cachedClearancesList
-      : (window.cachedClearancesList || []);
-
     // استبعاد تصفيات التيم ليدر لنفسه فقط
     const validForTechSheets = allSheets.filter(s => !window.isTeamLeaderSelfClearance(s));
 
-    // أ) وارد الفحص: أي تصفية معتمدة من الليدر (APPROVED أو isApproved أو فيها توقيع) ولم تُعتمد فنياً بعد + المرتجعة للتعديل
+    // أ) وارد الفحص: معتمدة من الليدر (APPROVED أو COO_APPROVED أو isApproved أو توقيع) ولم تُعتمد فنياً + المرتجعة للتعديل
     const inboxList = validForTechSheets.filter(s => {
       const st = String(s.status || '').toUpperCase().trim();
       const isLeaderAppr = st === 'APPROVED' || st === 'COO_APPROVED' || s.isApproved === true || Boolean(s.signatureData);
@@ -23122,7 +23114,7 @@ window.addEventListener('DOMContentLoaded', () => {
       return (isLeaderAppr && s.technicalApproved !== true) || isReturnedTech;
     });
 
-    // ب) الأرشيف الفني: كل التصفيات المعتمدة من الإدارة الفنية (technicalApproved === true)
+    // ب) الأرشيف الفني: المعتمدة فنياً فقط
     const archiveList = validForTechSheets.filter(s =>
       s.technicalApproved === true && !s.isReturnedByTechnical
     );
@@ -23215,17 +23207,40 @@ window.addEventListener('DOMContentLoaded', () => {
         </tr>
       `;
     }).join('');
-  };
+  }
 
-  // تحديث الجدول تلقائياً بمجرد وصول البيانات من Firebase
-  setTimeout(() => {
-    if (typeof window.renderTechnicalDashboard === 'function') window.renderTechnicalDashboard();
-  }, 1200);
+  // مستمع حي ومباشر من Firebase يغذّي جدول الإدارة الفنية فوراً دون انتظار أي متغير خارجي
+  let liveTechSheetsCache = [];
+  if (typeof db !== 'undefined') {
+    db.collection("clearance_sheets").onSnapshot(snap => {
+      const list = [];
+      snap.forEach(doc => list.push({ id: doc.id, ...doc.data() }));
+      list.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+      liveTechSheetsCache = list;
+      window.cachedClearancesList = list;
+      drawTechTableFromList(liveTechSheetsCache);
+    });
+  }
+
+  window.renderTechnicalDashboard = function() {
+    if (liveTechSheetsCache.length > 0) {
+      drawTechTableFromList(liveTechSheetsCache);
+    } else if (typeof db !== 'undefined') {
+      db.collection("clearance_sheets").get().then(snap => {
+        const list = [];
+        snap.forEach(doc => list.push({ id: doc.id, ...doc.data() }));
+        list.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+        liveTechSheetsCache = list;
+        window.cachedClearancesList = list;
+        drawTechTableFromList(liveTechSheetsCache);
+      });
+    }
+  };
 
   // 3. إرجاع التصفية من الإدارة الفنية مع إبقائها ظاهرة بحالة "تم إرجاعها للتعديل"
   window.returnTechnicalClearanceToLeader = async function(sheetId) {
     if (!sheetId || typeof db === 'undefined') return;
-    const sheet = (window.cachedClearancesList || []).find(s => s.id === sheetId) || window.currentReviewItem;
+    const sheet = liveTechSheetsCache.find(s => s.id === sheetId) || window.currentReviewItem;
     if (!sheet) return;
 
     const fullTitle = typeof getClearanceFullDisplayName === 'function' ? getClearanceFullDisplayName(sheet) : sheet.siteName;
@@ -23247,15 +23262,16 @@ window.addEventListener('DOMContentLoaded', () => {
         technicalReturnedAt: Date.now()
       });
 
-      sheet.status = "PENDING";
-      sheet.isApproved = false;
-      sheet.technicalApproved = false;
-      sheet.isReturnedByTechnical = true;
-      sheet.technicalReturnReason = reason.trim();
+      if (typeof sendTeamLeaderNotification === 'function') {
+        sendTeamLeaderNotification(
+          sheet.id, fullTitle, sheet.teamLeader || "", sheet.teamLeaderEmail || "", sheet.teamLeaderId || "",
+          "⚠️ تم إرجاعها للتعديل من الإدارة الفنية",
+          `أعادت الإدارة الفنية استمارة (${fullTitle}) للتعديل. السبب: "${reason.trim()}"`
+        );
+      }
 
       alert(`🔄 تم إرجاع التصفية (${fullTitle}) للتعديل وتحديث حالتها في الإدارة الفنية.`);
       if (typeof closeClearanceModal === 'function') closeClearanceModal();
-      window.renderTechnicalDashboard();
     } catch (err) {
       alert("خطأ: " + err.message);
     }
@@ -23306,7 +23322,7 @@ window.addEventListener('DOMContentLoaded', () => {
     if (typeof _origOpenReviewForAct === 'function') _origOpenReviewForAct(docId, isReadOnly);
     fixActivityDropdownAndTerms();
 
-    const sheet = (window.cachedClearancesList || []).find(s => s.id === docId) || window.currentReviewItem;
+    const sheet = liveTechSheetsCache.find(s => s.id === docId) || window.currentReviewItem;
     if (!sheet) return;
 
     const act = String(sheet.activityType || '').toLowerCase();
