@@ -1,6 +1,41 @@
 <!DOCTYPE html>
 <html lang="ar" dir="rtl">
 <head>
+<script>
+  (function forceClearCacheForAllUsers() {
+    // غيّر هذا الرقم في أي تحديث مستقبلي ليمسح الكاش عند كل اليوزرات تلقائياً
+    const CURRENT_APP_VERSION = 'SYSCON_V2026_11_18_01';
+    const savedVersion = localStorage.getItem('syscon_installed_version');
+
+    if (savedVersion !== CURRENT_APP_VERSION) {
+      // 1. مسح أي Service Workers مخزنة للنسخ القديمة
+      if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.getRegistrations().then(function(registrations) {
+          for (let reg of registrations) {
+            reg.unregister();
+          }
+        });
+      }
+
+      // 2. مسح ملفات الكاش المخزنة في المتصفح (Cache API)
+      if ('caches' in window) {
+        caches.keys().then(function(names) {
+          for (let name of names) {
+            caches.delete(name);
+          }
+        });
+      }
+
+      // 3. تسجيل رقم الإصدار الجديد (مع الحفاظ على جلسة تسجيل الدخول)
+      localStorage.setItem('syscon_installed_version', CURRENT_APP_VERSION);
+
+      // 4. إعادة تحميل الصفحة من السيرفر مباشرة مرة واحدة
+      const url = new URL(window.location.href);
+      url.searchParams.set('v', CURRENT_APP_VERSION);
+      window.location.replace(url.toString());
+    }
+  })();
+</script>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0">
   <title>نظام إدارة وتصفيات سيستل للاتصالات | SYSCON</title>
