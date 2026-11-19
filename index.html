@@ -2,51 +2,6 @@
 <html lang="ar" dir="rtl" data-theme="dark">
 <head>
   <meta charset="UTF-8">
-<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
-<meta http-equiv="Pragma" content="no-cache">
-<meta http-equiv="Expires" content="0">
-<script>
-(function forceLatestBuildAndCleanOldCache() {
-  const APP_BUILD_VERSION = "SYSCON_V2026_11_19_FINAL";
-  const savedBuild = localStorage.getItem("syscon_app_build_ver");
-
-  // 1. مسح أي Service Worker قديم أو Cache Storage قديم فوراً
-  if ("serviceWorker" in navigator) {
-    navigator.serviceWorker.getRegistrations().then(function(regs) {
-      regs.forEach(function(reg) { reg.unregister(); });
-    }).catch(function() {});
-  }
-  if ("caches" in window) {
-    caches.keys().then(function(names) {
-      names.forEach(function(name) { caches.delete(name); });
-    }).catch(function() {});
-  }
-
-  // 2. إذا كان اليوزر يفتح لأول مرة بعد التحديث الجديد:
-  // ننظف مفاتيح الجلسات والكاش القديم ونعمل Reload نظيف مرة واحدة بالنسخة الجديدة
-  if (savedBuild !== APP_BUILD_VERSION) {
-    [
-      "systel_active_user_session",
-      "systel_app_persistent_session_v2",
-      "systel_clearances_store",
-      "systel_manpower_clean_v3",
-      "systel_manpower_v2_store",
-      "systel_manpower_data_store",
-      "syscon_locked_tech_roles"
-    ].forEach(function(k) {
-      try { localStorage.removeItem(k); } catch (e) {}
-    });
-
-    try { localStorage.setItem("syscon_app_build_ver", APP_BUILD_VERSION); } catch (e) {}
-
-    // إعادة تحميل الصفحة من السيرفر مباشرة بدون كاش (مرة واحدة فقط)
-    if (!window.location.search.includes("v=" + APP_BUILD_VERSION)) {
-      const sep = window.location.search ? "&" : "?";
-      window.location.replace(window.location.pathname + window.location.search + sep + "v=" + APP_BUILD_VERSION);
-    }
-  }
-})();
-</script>
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0">
   <title>SYSCON | منظومة إدارة العمليات والتصفيات المالية - سيستل للاتصالات</title>
   <meta name="theme-color" content="#070d19">
@@ -6569,536 +6524,6 @@
 })();
 </script>
 <script>
-(function upgradeMainDashboardDynamicChart() {
-
-  let dynChartInstance = null;
-  let dynChartMetric = 'DAYS'; // 'DAYS' | 'DEPT' | 'STATUS'
-  let dynChartType = 'line';   // 'line' | 'bar'
-  let dynChartBuckets = [];
-
-  function ensureDynamicChartControls() {
-    const canvas = document.getElementById('leaderWeeklyExpenseCanvas');
-    if (!canvas) return null;
-
-    const card = canvas.closest('.sys-card') || canvas.parentElement;
-    if (!card || card.getAttribute('data-dyn-chart-ready') === 'true') return card;
-    card.setAttribute('data-dyn-chart-ready', 'true');
-
-    const controlsHtml = `
-      <div id="dynChartToolbar" class="flex flex-wrap items-center justify-between gap-2 pb-3 mb-3 border-b border-slate-800/80 text-xs">
-        <div class="flex flex-wrap items-center gap-1.5">
-          <button type="button" id="btnDynMetric_DAYS" onclick="setDynChartMetric('DAYS')" class="sys-btn-sm bg-emerald-600 text-white">7 أيام</button>
-          <button type="button" id="btnDynMetric_DEPT" onclick="setDynChartMetric('DEPT')" class="sys-btn-sm bg-slate-800 text-slate-300 hover:text-white">حسب القسم</button>
-          <button type="button" id="btnDynMetric_STATUS" onclick="setDynChartMetric('STATUS')" class="sys-btn-sm bg-slate-800 text-slate-300 hover:text-white">حسب الحالة</button>
-        </div>
-
-        <div class="flex items-center gap-1.5">
-          <button type="button" id="btnDynType_line" onclick="setDynChartType('line')" class="sys-btn-sm bg-sky-600 text-white" title="رسم خطي">
-            <i data-lucide="trending-up" class="lucide-inline"></i><span>خطي</span>
-          </button>
-          <button type="button" id="btnDynType_bar" onclick="setDynChartType('bar')" class="sys-btn-sm bg-slate-800 text-slate-300 hover:text-white" title="أعمدة">
-            <i data-lucide="bar-chart-2" class="lucide-inline"></i><span>أعمدة</span>
-          </button>
-        </div>
-      </div>
-
-      <div id="dynChartKpiStrip" class="grid grid-cols-3 gap-2.5 mb-3 text-center text-xs">
-        <div class="bg-slate-950/80 border border-slate-800 rounded-xl p-2.5">
-          <span class="text-[10px] text-slate-400 font-bold block">إجمالي الفترة</span>
-          <strong id="dynChartTotalVal" class="text-sm font-black text-emerald-400 font-mono">0 ج.م</strong>
-        </div>
-        <div class="bg-slate-950/80 border border-slate-800 rounded-xl p-2.5">
-          <span class="text-[10px] text-slate-400 font-bold block">الأعلى قيمة</span>
-          <strong id="dynChartPeakVal" class="text-xs font-black text-sky-400 truncate block mt-0.5">-</strong>
-        </div>
-        <div class="bg-slate-950/80 border border-slate-800 rounded-xl p-2.5">
-          <span class="text-[10px] text-slate-400 font-bold block">المتوسط</span>
-          <strong id="dynChartAvgVal" class="text-sm font-black text-amber-300 font-mono">0 ج.م</strong>
-        </div>
-      </div>
-
-      <div id="dynChartDrilldownBox" class="hidden mt-3 p-3 rounded-xl bg-slate-950 border border-sky-500/40 text-xs space-y-1.5">
-        <div class="flex items-center justify-between">
-          <span id="dynChartDrillTitle" class="font-black text-sky-300">-</span>
-          <button type="button" onclick="document.getElementById('dynChartDrilldownBox').classList.add('hidden')" class="text-slate-400 hover:text-white text-[11px] cursor-pointer">إخفاء</button>
-        </div>
-        <div id="dynChartDrillList" class="text-[11px] text-slate-300 space-y-1 max-h-28 overflow-y-auto"></div>
-      </div>
-    `;
-
-    const wrapper = document.createElement('div');
-    wrapper.innerHTML = controlsHtml;
-    card.prepend(wrapper);
-    if (window.lucide && typeof window.lucide.createIcons === 'function') {
-      window.lucide.createIcons();
-    }
-    return card;
-  }
-
-  function getCurrentFilteredSheetsForChart() {
-    const all = Array.isArray(window.cachedClearancesList) ? window.cachedClearancesList : [];
-    const searchQ = (document.getElementById('filterSearch')?.value || '').toLowerCase().trim();
-    const stF = (document.getElementById('filterStatus')?.value || 'ALL').toUpperCase();
-    const deptF = document.getElementById('filterDepartment')?.value || 'ALL';
-    const engF = (document.getElementById('filterEngineer')?.value || 'ALL').toLowerCase().trim();
-    const fromV = document.getElementById('leaderDateFrom')?.value || '';
-    const toV = document.getElementById('leaderDateTo')?.value || '';
-
-    return all.filter(s => {
-      if (fromV || toV) {
-        const raw = String(s.startDate || '').trim();
-        let ms = s.createdAt || 0;
-        const m1 = raw.match(/^(\d{1,2})[\/\-\.](\d{1,2})[\/\-\.](\d{4})/);
-        if (m1) ms = new Date(+m1[3], +m1[2] - 1, +m1[1]).getTime();
-        if (fromV && ms < new Date(fromV + 'T00:00:00').getTime()) return false;
-        if (toV && ms > new Date(toV + 'T23:59:59').getTime()) return false;
-      }
-      const st = String(s.status || 'PENDING').toUpperCase();
-      if (stF !== 'ALL' && st !== stF) return false;
-      if (deptF !== 'ALL' && s.department !== deptF) return false;
-      if (engF !== 'all') {
-        const sub = String(s.submittedByEngineer || '').toLowerCase().trim();
-        const mem = String(s.teamMembers || '').toLowerCase();
-        if (sub !== engF && !mem.includes(engF)) return false;
-      }
-      if (searchQ) {
-        const hay = `${s.clearanceName || ''} ${s.siteName || ''} ${s.region || ''} ${s.department || ''} ${s.submittedByEngineer || ''} ${s.teamLeader || ''}`.toLowerCase();
-        if (!hay.includes(searchQ)) return false;
-      }
-      return true;
-    });
-  }
-
-  function buildChartBuckets(sheets) {
-    const getExp = (s) => (s.items || []).reduce((a, b) => a + (parseFloat(b.amount) || 0), 0);
-
-    if (dynChartMetric === 'DEPT') {
-      const map = {};
-      sheets.forEach(s => {
-        const k = s.department || 'أخرى';
-        if (!map[k]) map[k] = { label: k, value: 0, count: 0, sheets: [] };
-        map[k].value += getExp(s);
-        map[k].count++;
-        map[k].sheets.push(s);
-      });
-      const arr = Object.values(map).sort((a, b) => b.value - a.value);
-      return arr.length ? arr : [{ label: 'لا توجد بيانات', value: 0, count: 0, sheets: [] }];
-    }
-
-    if (dynChartMetric === 'STATUS') {
-      const buckets = [
-        { label: 'معتمدة', value: 0, count: 0, sheets: [] },
-        { label: 'قيد المراجعة', value: 0, count: 0, sheets: [] },
-        { label: 'مرجعة للتعديل', value: 0, count: 0, sheets: [] }
-      ];
-      sheets.forEach(s => {
-        const exp = getExp(s);
-        const st = String(s.status || 'PENDING').toUpperCase();
-        const idx = st === 'APPROVED' ? 0 : (st === 'REJECTED' ? 2 : 1);
-        buckets[idx].value += exp;
-        buckets[idx].count++;
-        buckets[idx].sheets.push(s);
-      });
-      return buckets;
-    }
-
-    const days = ['السبت', 'الأحد', 'الاثنين', 'الثلاثاء', 'الأربعاء', 'الخميس', 'الجمعة'];
-    const buckets = days.map(d => ({ label: d, value: 0, count: 0, sheets: [] }));
-    sheets.forEach(s => {
-      const exp = getExp(s);
-      const raw = String(s.startDate || '').trim();
-      let ms = s.createdAt || Date.now();
-      const m1 = raw.match(/^(\d{1,2})[\/\-\.](\d{1,2})[\/\-\.](\d{4})/);
-      if (m1) ms = new Date(+m1[3], +m1[2] - 1, +m1[1]).getTime();
-      const idx = (new Date(ms).getDay() + 1) % 7;
-      buckets[idx].value += exp;
-      buckets[idx].count++;
-      buckets[idx].sheets.push(s);
-    });
-    return buckets;
-  }
-
-  window.renderDynamicDashboardChart = function() {
-    ensureDynamicChartControls();
-    const canvas = document.getElementById('leaderWeeklyExpenseCanvas');
-    if (!canvas || typeof Chart === 'undefined') return;
-
-    const sheets = getCurrentFilteredSheetsForChart();
-    dynChartBuckets = buildChartBuckets(sheets);
-
-    const totalVal = dynChartBuckets.reduce((a, b) => a + b.value, 0);
-    const nonZero = dynChartBuckets.filter(b => b.value > 0);
-    const avgVal = nonZero.length > 0 ? Math.round(totalVal / nonZero.length) : 0;
-    const peak = [...dynChartBuckets].sort((a, b) => b.value - a.value)[0];
-
-    const elTot = document.getElementById('dynChartTotalVal');
-    const elPeak = document.getElementById('dynChartPeakVal');
-    const elAvg = document.getElementById('dynChartAvgVal');
-    if (elTot) elTot.innerText = `${totalVal.toLocaleString()} ج.م`;
-    if (elPeak) elPeak.innerText = (peak && peak.value > 0) ? `${peak.label} (${peak.value.toLocaleString()})` : '-';
-    if (elAvg) elAvg.innerText = `${avgVal.toLocaleString()} ج.م`;
-
-    ['DAYS', 'DEPT', 'STATUS'].forEach(m => {
-      const b = document.getElementById('btnDynMetric_' + m);
-      if (b) b.className = (m === dynChartMetric) ? 'sys-btn-sm bg-emerald-600 text-white' : 'sys-btn-sm bg-slate-800 text-slate-300 hover:text-white';
-    });
-    ['line', 'bar'].forEach(t => {
-      const b = document.getElementById('btnDynType_' + t);
-      if (b) b.className = (t === dynChartType) ? 'sys-btn-sm bg-sky-600 text-white' : 'sys-btn-sm bg-slate-800 text-slate-300 hover:text-white';
-    });
-
-    if (dynChartInstance) dynChartInstance.destroy();
-
-    const barColors = ['#10b981', '#0ea5e9', '#8b5cf6', '#f59e0b', '#ec4899', '#14b8a6', '#f97316'];
-
-    dynChartInstance = new Chart(canvas.getContext('2d'), {
-      type: dynChartType,
-      data: {
-        labels: dynChartBuckets.map(b => b.label),
-        datasets: [{
-          label: 'المصروفات (ج.م)',
-          data: dynChartBuckets.map(b => b.value),
-          borderColor: '#10b981',
-          backgroundColor: dynChartType === 'bar'
-            ? dynChartBuckets.map((_, i) => barColors[i % barColors.length])
-            : 'rgba(16, 185, 129, 0.16)',
-          borderWidth: dynChartType === 'line' ? 3 : 0,
-          borderRadius: dynChartType === 'bar' ? 8 : 0,
-          fill: dynChartType === 'line',
-          tension: 0.35,
-          pointRadius: 5,
-          pointHoverRadius: 7,
-          pointBackgroundColor: '#34d399'
-        }]
-      },
-      options: {
-        animation: false,
-        responsive: true,
-        maintainAspectRatio: false,
-        onClick: (_, elements) => {
-          if (!elements || !elements.length) return;
-          const bucket = dynChartBuckets[elements[0].index];
-          const box = document.getElementById('dynChartDrilldownBox');
-          const titleEl = document.getElementById('dynChartDrillTitle');
-          const listEl = document.getElementById('dynChartDrillList');
-          if (!bucket || !box || !titleEl || !listEl) return;
-
-          titleEl.innerText = `${bucket.label}: ${bucket.value.toLocaleString()} ج.م (${bucket.count} استمارة)`;
-          listEl.innerHTML = bucket.sheets.length === 0
-            ? `<div class="text-slate-500">لا توجد استمارات مسجلة هنا.</div>`
-            : bucket.sheets.slice(0, 8).map(s => {
-                const e = (s.items || []).reduce((a, b) => a + (parseFloat(b.amount) || 0), 0);
-                return `<div class="flex items-center justify-between py-1 border-b border-slate-800/70">
-                  <span class="font-mono text-white">${escapeHtml(s.clearanceName || s.siteName || '-')}</span>
-                  <span class="font-mono text-emerald-400 font-bold">${e.toLocaleString()} ج.م</span>
-                </div>`;
-              }).join('');
-          box.classList.remove('hidden');
-        },
-        plugins: {
-          legend: { display: false },
-          tooltip: {
-            backgroundColor: '#0f172a',
-            titleColor: '#38bdf8',
-            bodyFont: { family: 'Cairo', weight: 'bold' },
-            callbacks: {
-              label: (ctx) => {
-                const b = dynChartBuckets[ctx.dataIndex] || { count: 0 };
-                return ` المنصرف: ${Number(ctx.parsed.y || 0).toLocaleString()} ج.م (${b.count} استمارة)`;
-              }
-            }
-          }
-        },
-        scales: {
-          x: { ticks: { color: '#cbd5e1', font: { family: 'Cairo', size: 11, weight: 'bold' } }, grid: { display: false } },
-          y: { beginAtZero: true, ticks: { color: '#94a3b8', font: { family: 'Cairo', size: 10 } }, grid: { color: 'rgba(148,163,184,0.08)' } }
-        }
-      }
-    });
-  };
-
-  window.setDynChartMetric = function(m) {
-    dynChartMetric = m;
-    window.renderDynamicDashboardChart();
-  };
-
-  window.setDynChartType = function(t) {
-    dynChartType = t;
-    window.renderDynamicDashboardChart();
-  };
-
-  const _origRenderLeaderForDynChart = window.renderLeaderDashboard;
-  window.renderLeaderDashboard = function() {
-    if (typeof _origRenderLeaderForDynChart === 'function') {
-      _origRenderLeaderForDynChart.apply(this, arguments);
-    }
-    window.renderDynamicDashboardChart();
-  };
-
-  setTimeout(window.renderDynamicDashboardChart, 400);
-})();
-</script>
-<script>
-(function upgradePwaInstallAndStrictQrVerification() {
-
-  // =========================================================================
-  // 1. تسجيل Service Worker للتثبيت الحقيقي على الموبايل واللاب توب (PWA)
-  // =========================================================================
-  function registerRealServiceWorker() {
-    if (!('serviceWorker' in navigator)) return;
-    const swCode = `
-      self.addEventListener('install', function(event) {
-        self.skipWaiting();
-      });
-      self.addEventListener('activate', function(event) {
-        event.waitUntil(self.clients.claim());
-      });
-      self.addEventListener('fetch', function(event) {
-        // تمرير الطلبات مباشرة للشبكة لضمان حداثة البيانات اللحظية
-      });
-    `;
-    try {
-      const swBlob = new Blob([swCode], { type: 'application/javascript' });
-      const swUrl = URL.createObjectURL(swBlob);
-      navigator.serviceWorker.register(swUrl).catch(function() {});
-    } catch (e) {}
-  }
-
-  registerRealServiceWorker();
-
-  // =========================================================================
-  // 2. استخراج نص حالة التصفية الواضح لأي استمارة
-  // =========================================================================
-  window.getClearanceStatusLabelForQr = function(s) {
-    if (!s) return 'غير معروفة';
-    const st = String(s.status || '').toUpperCase().trim();
-    if (st === 'REJECTED' || s.isRejected) {
-      const rsn = s.cancelReason || s.rejectionReason || s.technicalReturnReason || '';
-      return rsn ? `مرجعة للتعديل — السبب: ${rsn}` : 'مرجعة للتعديل';
-    }
-    if (s.deliveredToAccounts || s.hrConfirmed) {
-      return `معتمدة ومُسلّمة للحسابات (${s.deliveredToAccountsBy || s.hrConfirmedBy || 'HR'})`;
-    }
-    if (s.cooApproved) {
-      return `معتمدة من COO — بانتظار الصرف المالي (HR)`;
-    }
-    if (s.technicalApproved) {
-      return `معتمدة من الإدارة الفنية (${s.technicalApprovedBy || 'فنية'}) — بانتظار COO`;
-    }
-    if (st === 'APPROVED' || s.isApproved || Boolean(s.signatureData)) {
-      return `معتمدة من التيم ليدر (${s.approvedBy || s.teamLeader || 'ليدر'}) — بانتظار الإدارة الفنية`;
-    }
-    return `قيد المراجعة — بانتظار التيم ليدر (${s.teamLeader || '-'})`;
-  };
-
-  // =========================================================================
-  // 3. بناء رابط الـ QR حاملاً حالة التصفية وبياناتها لظهورها فوراً عند المسح
-  // =========================================================================
-  window.buildStrictQrVerifyUrl = function(sheet) {
-    if (!sheet) return window.location.href;
-    const base = window.location.origin + window.location.pathname;
-    const code = (sheet.sheetNumber || '').trim() || 'SYS-0000';
-    const site = (sheet.siteName || '-').trim();
-    const eng = (sheet.submittedByEngineer || '-').trim();
-    const ldr = (sheet.teamLeader || '-').trim();
-    const exp = (sheet.items || []).reduce((a, b) => a + (parseFloat(b.amount) || 0), 0);
-    const statusText = window.getClearanceStatusLabelForQr(sheet);
-    const pCnt = parseInt(sheet.printCount || 0, 10);
-
-    const payload = {
-      id: sheet.id || '',
-      code,
-      site,
-      eng,
-      ldr,
-      exp,
-      statusText,
-      pCnt,
-      firstBy: sheet.firstPrintedBy || '',
-      firstAt: sheet.firstPrintedAtStr || '',
-      accBy: sheet.deliveredToAccountsBy || sheet.hrConfirmedBy || '',
-      accAt: sheet.deliveredToAccountsAt || sheet.hrConfirmedDate || ''
-    };
-
-    const encoded = btoa(unescape(encodeURIComponent(JSON.stringify(payload))));
-    return `${base}?verify_clearance=${encodeURIComponent(sheet.id || code)}&qr_data=${encodeURIComponent(encoded)}`;
-  };
-
-  function updateAllQrCodesInSheet(sheet) {
-    if (!sheet) return;
-    const qrUrl = window.buildStrictQrVerifyUrl(sheet);
-    const qrSrc = `https://api.qrserver.com/v1/create-qr-code/?size=140x140&margin=2&data=${encodeURIComponent(qrUrl)}`;
-    const qrCont = document.getElementById('m_qrAndCodeContainer');
-    if (qrCont) {
-      qrCont.querySelectorAll('img.qr-stamp-img').forEach(x => x.remove());
-      const img = document.createElement('img');
-      img.className = 'qr-stamp-img';
-      img.src = qrSrc;
-      img.style.cssText = 'width:44px;height:44px;border:1.5px solid #0284c7;border-radius:6px;background:#fff;padding:2px;';
-      qrCont.prepend(img);
-    }
-  }
-
-  const _origOpenReviewQr = window.openClearanceReview;
-  window.openClearanceReview = function(docId, isReadOnly = false) {
-    if (typeof _origOpenReviewQr === 'function') _origOpenReviewQr(docId, isReadOnly);
-    const sheet = (window.cachedClearancesList || []).find(x => x.id === docId) || window.currentReviewItem;
-    if (sheet) updateAllQrCodesInSheet(sheet);
-  };
-
-  // =========================================================================
-  // 4. عرض حالة التصفية فوراً عند المسح ومنع الدخول للبرنامج نهائياً
-  // =========================================================================
-  function renderVerifyScreenFromPayload(p) {
-    const pv = document.getElementById('sysconPublicVerifyScreen');
-    if (!pv) return;
-
-    // إخفاء أي واجهة برنامج أو تسجيل دخول نهائياً
-    document.getElementById('loginOverlay')?.remove();
-    document.querySelector('header')?.remove();
-    document.querySelector('main')?.remove();
-    document.getElementById('sysconMobileBottomNav')?.remove();
-
-    pv.classList.remove('hidden');
-    pv.style.setProperty('display', 'block', 'important');
-
-    document.getElementById('pv_sheetCode').innerText = p.code || 'SYS-0000';
-    document.getElementById('pv_siteName').innerText = p.site || '-';
-    document.getElementById('pv_dept').innerText = p.dept || '-';
-    document.getElementById('pv_totalExpenses').innerText = `${Number(p.exp || 0).toLocaleString()} ج.م`;
-    document.getElementById('pv_engineerName').innerText = p.eng || '-';
-    document.getElementById('pv_leaderName').innerText = p.ldr || '-';
-    document.getElementById('pv_dates').innerText = p.dates || '-';
-
-    const accEl = document.getElementById('pv_accountsStatus');
-    if (accEl) {
-      accEl.innerText = p.accBy ? `مُسلّمة للحسابات (${p.accBy})` : 'لم تُسلّم للحسابات بعد';
-    }
-
-    const badge = document.getElementById('pv_printStatusBadge');
-    if (badge) {
-      const pCnt = parseInt(p.pCnt || 0, 10);
-      badge.className = 'p-4 rounded-2xl text-xs font-black flex flex-col gap-1.5 bg-slate-900 border-2 border-sky-500 text-white';
-      badge.innerHTML = `
-        <div class="text-sm text-sky-300">حالة التصفية الحالية: <span class="text-emerald-400">${p.statusText || '-'}</span></div>
-        <div class="text-[11px] text-slate-300 font-bold">
-          ${pCnt > 0
-            ? `عدد مرات الطباعة: (${pCnt}) • أول طباعة بواسطة: ${p.firstBy || '-'} (${p.firstAt || '-'})`
-            : 'لم يتم تسجيل طباعة ورقية بعد'}
-        </div>
-      `;
-    }
-
-    // إزالة أي زر للانتقال للبرنامج حتى لا يدخل المستخدم على السيستم من مسح الكود
-    pv.querySelectorAll('button').forEach(btn => btn.remove());
-  }
-
-  function runStrictQrScanMode() {
-    const params = new URLSearchParams(window.location.search);
-    const vId = params.get('verify_clearance');
-    const rawQrData = params.get('qr_data');
-    if (!vId && !rawQrData) return false;
-
-    let decoded = { id: vId || '', code: vId || 'SYS-0000', statusText: 'جاري التحقق...' };
-    if (rawQrData) {
-      try {
-        decoded = JSON.parse(decodeURIComponent(escape(atob(rawQrData))));
-      } catch (e) {}
-    }
-
-    renderVerifyScreenFromPayload(decoded);
-
-    // تحديث البيانات الفورية من قاعدة البيانات إن أمكن مع بقاء حالة التصفية ظاهرة دون الدخول للبرنامج
-    if (vId && typeof db !== 'undefined') {
-      db.collection("clearance_sheets").doc(vId).get().then(doc => {
-        if (doc.exists) {
-          const s = { id: doc.id, ...doc.data() };
-          renderVerifyScreenFromPayload({
-            id: s.id,
-            code: s.sheetNumber || decoded.code,
-            site: s.siteName || decoded.site,
-            dept: `${s.department || '-'} (${s.activityType || '-'})`,
-            eng: s.submittedByEngineer || decoded.eng,
-            ldr: s.teamLeader || decoded.ldr,
-            dates: `${s.startDate || '-'} إلى ${s.endDate || '-'}`,
-            exp: (s.items || []).reduce((a, b) => a + (parseFloat(b.amount) || 0), 0),
-            statusText: window.getClearanceStatusLabelForQr(s),
-            pCnt: s.printCount || 0,
-            firstBy: s.firstPrintedBy || '',
-            firstAt: s.firstPrintedAtStr || '',
-            accBy: s.deliveredToAccountsBy || s.hrConfirmedBy || ''
-          });
-        }
-      }).catch(() => {});
-    }
-
-    // منع أي كود آخر من إظهار شاشة الدخول أو البرنامج في وضع الفحص
-    setInterval(() => {
-      document.getElementById('loginOverlay')?.remove();
-      document.querySelector('header')?.remove();
-      document.querySelector('main')?.remove();
-    }, 250);
-
-    return true;
-  }
-
-  runStrictQrScanMode();
-})();
-</script>
-<script>
-(function fixChartCanvasCrashAndLoginFlow() {
-
-  function safeDestroyCanvasChart(canvas) {
-    if (!canvas || typeof Chart === 'undefined') return;
-    try {
-      const existing = Chart.getChart(canvas);
-      if (existing) existing.destroy();
-    } catch (e) {}
-    try {
-      if (Chart.instances && typeof Chart.instances === 'object') {
-        Object.keys(Chart.instances).forEach(key => {
-          const inst = Chart.instances[key];
-          if (inst && inst.canvas === canvas) {
-            try { inst.destroy(); } catch (err) {}
-          }
-        });
-      }
-    } catch (e) {}
-  }
-
-  const _origRenderDynChart = window.renderDynamicDashboardChart;
-  window.renderDynamicDashboardChart = function() {
-    try {
-      const canvas = document.getElementById('leaderWeeklyExpenseCanvas');
-      if (canvas) safeDestroyCanvasChart(canvas);
-      if (typeof _origRenderDynChart === 'function') {
-        return _origRenderDynChart.apply(this, arguments);
-      }
-    } catch (e) {
-      console.warn('Safe Chart Render Catch:', e);
-    }
-  };
-
-  // تأمين رندر اللوحة الرئيسية وعدم توقفه لأي سبب
-  const _origRenderLeader = window.renderLeaderDashboard;
-  window.renderLeaderDashboard = function() {
-    try {
-      if (typeof _origRenderLeader === 'function') {
-        _origRenderLeader.apply(this, arguments);
-      }
-    } catch (e) {
-      console.warn('Safe Leader Render Catch:', e);
-    }
-    try {
-      if (typeof window.renderDynamicDashboardChart === 'function') {
-        window.renderDynamicDashboardChart();
-      }
-    } catch (e) {}
-  };
-
-})();
-</script>
-<script>
 (function fixLeaderDashboardDataAndManpowerComplete() {
 
   function normText(v) {
@@ -7641,165 +7066,127 @@
 })();
 </script>
 <script>
-(function stabilizeInstantLoginOnceAndForAll() {
+(function sysconCleanFastBoot() {
+  // 1. منع أي طرد تلقائي بسبب تأخر تحميل قائمة المستخدمين
+  const _origLogout = window.handleLogout;
+  window.handleLogout = function(isManualClick) {
+    // لا تنفذ الخروج إلا إذا ضغط المستخدم بنفسه على زر "خروج"
+    if (isManualClick !== true && window.currentUser && window.currentUser.id) {
+      return;
+    }
+    if (typeof _origLogout === 'function') return _origLogout.apply(this, arguments);
+  };
 
-  function normPhoneClean(p) {
-    let d = String(p || '')
-      .replace(/[٠-٩]/g, c => '٠١٢٣٤٥٦٧٨٩'.indexOf(c))
-      .replace(/\D/g, '');
+  // ربط زر الخروج في الهيدر بالخروج اليدوي الصريح
+  document.querySelectorAll('button[onclick*="handleLogout"]').forEach(btn => {
+    btn.setAttribute('onclick', 'handleLogout(true)');
+  });
+
+  // 2. توحيد رقم الموبايل في البحث عند تسجيل الدخول
+  function cleanPh(p) {
+    let d = String(p || '').replace(/[٠-٩]/g, c => '٠١٢٣٤٥٦٧٨٩'.indexOf(c)).replace(/\D/g, '');
     if (d.startsWith('0020')) d = d.slice(4);
     else if (d.startsWith('20') && d.length === 12) d = d.slice(2);
     if (d.startsWith('0')) d = d.slice(1);
     return d;
   }
 
-  async function sha256Hex(plain) {
+  async function hashPwd(plain) {
     const buf = new TextEncoder().encode(String(plain).trim());
     const hBuf = await crypto.subtle.digest('SHA-256', buf);
     return 'sha256$' + Array.from(new Uint8Array(hBuf)).map(b => b.toString(16).padStart(2, '0')).join('');
   }
 
-  let isLoginRunning = false;
-
   window.handleLoginSubmit = async function() {
-    if (isLoginRunning) return;
     const ident = (document.getElementById('loginUsername')?.value || '').trim();
     const pwd = (document.getElementById('loginPassword')?.value || '').trim();
     if (!ident || !pwd) return alert('يرجى إدخال بيانات الحساب وكلمة المرور.');
 
-    isLoginRunning = true;
-    const loginBtn = document.querySelector('#formLogin button[onclick*="handleLoginSubmit"]');
-    const oldBtnHtml = loginBtn ? loginBtn.innerHTML : '';
-    if (loginBtn) {
-      loginBtn.disabled = true;
-      loginBtn.innerHTML = '<span>جاري الدخول...</span>';
-    }
+    const btn = document.querySelector('#formLogin button[onclick*="handleLoginSubmit"]');
+    if (btn) { btn.disabled = true; btn.style.opacity = '0.6'; }
 
     try {
-      const snap = await db.collection("user_accounts").get();
-      const key = ident.toLowerCase();
-      const keyPh = normPhoneClean(ident);
-      const hashedPwd = await sha256Hex(pwd);
+      const [snap, hPwd] = await Promise.all([
+        db.collection("user_accounts").get(),
+        hashPwd(pwd)
+      ]);
 
+      const key = ident.toLowerCase();
+      const keyPh = cleanPh(ident);
       let matched = null;
+
       snap.forEach(doc => {
         if (matched) return;
         const u = doc.data();
         if (!u || u.isSystemConfigDoc) return;
         const em = String(u.email || '').toLowerCase().trim();
         const nm = String(u.name || u.fullName || '').toLowerCase().trim();
-        const ph1 = normPhoneClean(u.phone || '');
-        const ph2 = normPhoneClean(u.mobile || '');
+        const p1 = cleanPh(u.phone || '');
+        const p2 = cleanPh(u.mobile || '');
 
-        if (
-          (em && em === key) ||
-          (nm && nm === key) ||
-          (keyPh.length >= 9 && ((ph1 && ph1 === keyPh) || (ph2 && ph2 === keyPh)))
-        ) {
+        if ((em && em === key) || (nm && nm === key) || (keyPh.length >= 9 && (p1 === keyPh || p2 === keyPh))) {
           matched = { id: doc.id, ...u };
         }
       });
 
-      if (!matched) {
-        alert('هذا الحساب غير مسجل بالنظام.');
-        return;
-      }
+      if (!matched) return alert('هذا الحساب غير مسجل بالنظام.');
 
       const savedPass = String(matched.password || matched.pass || '').trim();
-      if (savedPass && savedPass !== hashedPwd && savedPass !== pwd) {
-        alert('كلمة المرور غير صحيحة.');
-        return;
+      if (savedPass && savedPass !== hPwd && savedPass !== pwd) {
+        return alert('كلمة المرور غير صحيحة.');
       }
 
       const em = String(matched.email || '').toLowerCase().trim();
       const isExec = [
-        'yasser.awad.systel@gmail.com',
-        'yasser.awad.systel@gmail.co',
-        'mohamed.mounir@systel.com.eg',
-        'nasser.baset@systel.com.eg',
-        'mohamed.samih@systel.com.eg'
+        'yasser.awad.systel@gmail.com', 'yasser.awad.systel@gmail.co',
+        'mohamed.mounir@systel.com.eg', 'nasser.baset@systel.com.eg', 'mohamed.samih@systel.com.eg'
       ].includes(em);
 
       if (!isExec && matched.isApproved !== true) {
-        alert('الحساب بانتظار موافقة وتفعيل الإدارة.');
-        return;
+        return alert('الحساب بانتظار موافقة الإدارة.');
       }
 
-      const rStr = String(matched.role || '').toLowerCase().trim();
-      const tStr = String(matched.jobTitle || '').toLowerCase().trim();
+      const rStr = String(matched.role || '').toLowerCase();
+      const tStr = String(matched.jobTitle || '').toLowerCase();
       const actualRole = isExec ? 'leader'
-        : ((rStr === 'hr' || tStr.includes('hr') || tStr.includes('مالية') || tStr.includes('حسابات')) ? 'hr'
-        : ((rStr === 'technical' || tStr.includes('فنية') || tStr.includes('فني')) ? 'technical'
+        : ((rStr === 'hr' || tStr.includes('hr') || tStr.includes('مالية')) ? 'hr'
+        : ((rStr === 'technical' || tStr.includes('فنية')) ? 'technical'
         : (rStr === 'leader' ? 'leader' : 'engineer')));
 
       const selectedBtn = window.currentUser?.loginSelectedRole || actualRole;
-      if (!isExec) {
-        if (selectedBtn === 'leader' && actualRole !== 'leader') return alert('هذا الحساب غير مسجل كتيم ليدر.');
-        if (selectedBtn === 'hr' && actualRole !== 'hr') return alert('هذا الحساب غير مسجل بالمراجعة المالية HR.');
-        if (selectedBtn === 'technical' && actualRole !== 'technical') return alert('هذا الحساب غير مسجل بالإدارة الفنية.');
-        if (selectedBtn === 'engineer' && actualRole !== 'engineer') return alert('هذا الحساب غير مسجل كمهندس موقع.');
-      }
-
       let initView = 'engineer';
       if (isExec) initView = (selectedBtn === 'hr' ? 'hr' : (selectedBtn === 'technical' ? 'technical' : 'leader'));
       else if (actualRole === 'hr') initView = 'hr';
       else if (actualRole === 'technical') initView = 'technical';
       else if (actualRole === 'leader') initView = 'leader';
 
-      const jobTitle = matched.jobTitle || (isExec ? 'مدير النظام' : (actualRole === 'hr' ? 'المراجعة المالية HR' : (actualRole === 'technical' ? 'الإدارة الفنية' : (actualRole === 'leader' ? 'تيم ليدر' : 'مهندس موقع'))));
-
-      window.currentUser = Object.assign(window.currentUser || {}, {
+      window.currentUser = {
         id: matched.id,
         name: matched.name || matched.fullName || ident,
         email: em,
         phone: matched.phone || matched.mobile || '',
         role: actualRole === 'hr' ? 'leader' : actualRole,
         loginSelectedRole: selectedBtn,
-        jobTitle,
+        jobTitle: matched.jobTitle || (isExec ? 'مدير النظام' : 'تيم ليدر'),
         isApproved: true,
         activeViewMode: initView,
         permissions: matched.permissions || {}
-      });
+      };
 
-      try {
-        localStorage.setItem('systel_active_user_session_v3', JSON.stringify(window.currentUser));
-      } catch (e) {}
+      localStorage.setItem('systel_active_user_session_v3', JSON.stringify(window.currentUser));
 
-      // تحديث الواجهة وإخفاء شاشة الدخول فوراً
-      const nameEl = document.getElementById('headerUserName');
-      const roleEl = document.getElementById('headerUserRole');
-      const appByEl = document.getElementById('m_approvedBy');
-      if (nameEl) nameEl.textContent = window.currentUser.name;
-      if (roleEl) roleEl.textContent = window.currentUser.jobTitle;
-      if (appByEl) appByEl.textContent = window.currentUser.name;
+      document.getElementById('headerUserName').textContent = window.currentUser.name;
+      document.getElementById('headerUserRole').textContent = window.currentUser.jobTitle;
+      document.getElementById('loginOverlay').classList.add('hidden');
+      document.getElementById('loginOverlay').style.display = 'none';
 
-      const overlay = document.getElementById('loginOverlay');
-      if (overlay) {
-        overlay.classList.add('hidden');
-        overlay.style.setProperty('display', 'none', 'important');
-      }
-
-      if (typeof window.setAppMode === 'function') {
-        window.setAppMode(initView);
-      }
-
-      // تحديث الحضور في الخلفية بدون تعطيل فتح الشاشة
-      db.collection("user_accounts").doc(matched.id).update({
-        isOnline: true,
-        lastActivePing: Date.now()
-      }).catch(() => {});
-
-    } catch (err) {
-      alert('خطأ أثناء الدخول: ' + err.message);
+      if (typeof window.setAppMode === 'function') window.setAppMode(initView);
+    } catch (e) {
+      alert('خطأ: ' + e.message);
     } finally {
-      isLoginRunning = false;
-      if (loginBtn) {
-        loginBtn.disabled = false;
-        loginBtn.innerHTML = oldBtnHtml || '<span>دخول للنظام</span>';
-      }
+      if (btn) { btn.disabled = false; btn.style.opacity = '1'; }
     }
   };
-
 })();
 </script>
 </body>
