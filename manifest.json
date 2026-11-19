@@ -1,0 +1,18 @@
+{
+  "name": "شركة سيستل للاتصالات - نظام التصفية",
+  "short_name": "تصفية سيستل",
+  "description": "استمارة تصفية عهدة ومصاريف موقع رسمية لشركة سيستل للاتصالات",
+  "start_url": "./index.html",
+  "display": "standalone",
+  "background_color": "#020617",
+  "theme_color": "#0a192f",
+  "orientation": "portrait",
+  "icons": [
+    {
+      "src": "ic_launcher.webp",
+      "sizes": "192x192 512x512",
+      "type": "image/webp",
+      "purpose": "any maskable"
+    }
+  ]
+}

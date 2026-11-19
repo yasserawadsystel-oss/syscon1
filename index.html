@@ -7640,5 +7640,167 @@
 
 })();
 </script>
+<script>
+(function stabilizeInstantLoginOnceAndForAll() {
+
+  function normPhoneClean(p) {
+    let d = String(p || '')
+      .replace(/[٠-٩]/g, c => '٠١٢٣٤٥٦٧٨٩'.indexOf(c))
+      .replace(/\D/g, '');
+    if (d.startsWith('0020')) d = d.slice(4);
+    else if (d.startsWith('20') && d.length === 12) d = d.slice(2);
+    if (d.startsWith('0')) d = d.slice(1);
+    return d;
+  }
+
+  async function sha256Hex(plain) {
+    const buf = new TextEncoder().encode(String(plain).trim());
+    const hBuf = await crypto.subtle.digest('SHA-256', buf);
+    return 'sha256$' + Array.from(new Uint8Array(hBuf)).map(b => b.toString(16).padStart(2, '0')).join('');
+  }
+
+  let isLoginRunning = false;
+
+  window.handleLoginSubmit = async function() {
+    if (isLoginRunning) return;
+    const ident = (document.getElementById('loginUsername')?.value || '').trim();
+    const pwd = (document.getElementById('loginPassword')?.value || '').trim();
+    if (!ident || !pwd) return alert('يرجى إدخال بيانات الحساب وكلمة المرور.');
+
+    isLoginRunning = true;
+    const loginBtn = document.querySelector('#formLogin button[onclick*="handleLoginSubmit"]');
+    const oldBtnHtml = loginBtn ? loginBtn.innerHTML : '';
+    if (loginBtn) {
+      loginBtn.disabled = true;
+      loginBtn.innerHTML = '<span>جاري الدخول...</span>';
+    }
+
+    try {
+      const snap = await db.collection("user_accounts").get();
+      const key = ident.toLowerCase();
+      const keyPh = normPhoneClean(ident);
+      const hashedPwd = await sha256Hex(pwd);
+
+      let matched = null;
+      snap.forEach(doc => {
+        if (matched) return;
+        const u = doc.data();
+        if (!u || u.isSystemConfigDoc) return;
+        const em = String(u.email || '').toLowerCase().trim();
+        const nm = String(u.name || u.fullName || '').toLowerCase().trim();
+        const ph1 = normPhoneClean(u.phone || '');
+        const ph2 = normPhoneClean(u.mobile || '');
+
+        if (
+          (em && em === key) ||
+          (nm && nm === key) ||
+          (keyPh.length >= 9 && ((ph1 && ph1 === keyPh) || (ph2 && ph2 === keyPh)))
+        ) {
+          matched = { id: doc.id, ...u };
+        }
+      });
+
+      if (!matched) {
+        alert('هذا الحساب غير مسجل بالنظام.');
+        return;
+      }
+
+      const savedPass = String(matched.password || matched.pass || '').trim();
+      if (savedPass && savedPass !== hashedPwd && savedPass !== pwd) {
+        alert('كلمة المرور غير صحيحة.');
+        return;
+      }
+
+      const em = String(matched.email || '').toLowerCase().trim();
+      const isExec = [
+        'yasser.awad.systel@gmail.com',
+        'yasser.awad.systel@gmail.co',
+        'mohamed.mounir@systel.com.eg',
+        'nasser.baset@systel.com.eg',
+        'mohamed.samih@systel.com.eg'
+      ].includes(em);
+
+      if (!isExec && matched.isApproved !== true) {
+        alert('الحساب بانتظار موافقة وتفعيل الإدارة.');
+        return;
+      }
+
+      const rStr = String(matched.role || '').toLowerCase().trim();
+      const tStr = String(matched.jobTitle || '').toLowerCase().trim();
+      const actualRole = isExec ? 'leader'
+        : ((rStr === 'hr' || tStr.includes('hr') || tStr.includes('مالية') || tStr.includes('حسابات')) ? 'hr'
+        : ((rStr === 'technical' || tStr.includes('فنية') || tStr.includes('فني')) ? 'technical'
+        : (rStr === 'leader' ? 'leader' : 'engineer')));
+
+      const selectedBtn = window.currentUser?.loginSelectedRole || actualRole;
+      if (!isExec) {
+        if (selectedBtn === 'leader' && actualRole !== 'leader') return alert('هذا الحساب غير مسجل كتيم ليدر.');
+        if (selectedBtn === 'hr' && actualRole !== 'hr') return alert('هذا الحساب غير مسجل بالمراجعة المالية HR.');
+        if (selectedBtn === 'technical' && actualRole !== 'technical') return alert('هذا الحساب غير مسجل بالإدارة الفنية.');
+        if (selectedBtn === 'engineer' && actualRole !== 'engineer') return alert('هذا الحساب غير مسجل كمهندس موقع.');
+      }
+
+      let initView = 'engineer';
+      if (isExec) initView = (selectedBtn === 'hr' ? 'hr' : (selectedBtn === 'technical' ? 'technical' : 'leader'));
+      else if (actualRole === 'hr') initView = 'hr';
+      else if (actualRole === 'technical') initView = 'technical';
+      else if (actualRole === 'leader') initView = 'leader';
+
+      const jobTitle = matched.jobTitle || (isExec ? 'مدير النظام' : (actualRole === 'hr' ? 'المراجعة المالية HR' : (actualRole === 'technical' ? 'الإدارة الفنية' : (actualRole === 'leader' ? 'تيم ليدر' : 'مهندس موقع'))));
+
+      window.currentUser = Object.assign(window.currentUser || {}, {
+        id: matched.id,
+        name: matched.name || matched.fullName || ident,
+        email: em,
+        phone: matched.phone || matched.mobile || '',
+        role: actualRole === 'hr' ? 'leader' : actualRole,
+        loginSelectedRole: selectedBtn,
+        jobTitle,
+        isApproved: true,
+        activeViewMode: initView,
+        permissions: matched.permissions || {}
+      });
+
+      try {
+        localStorage.setItem('systel_active_user_session_v3', JSON.stringify(window.currentUser));
+      } catch (e) {}
+
+      // تحديث الواجهة وإخفاء شاشة الدخول فوراً
+      const nameEl = document.getElementById('headerUserName');
+      const roleEl = document.getElementById('headerUserRole');
+      const appByEl = document.getElementById('m_approvedBy');
+      if (nameEl) nameEl.textContent = window.currentUser.name;
+      if (roleEl) roleEl.textContent = window.currentUser.jobTitle;
+      if (appByEl) appByEl.textContent = window.currentUser.name;
+
+      const overlay = document.getElementById('loginOverlay');
+      if (overlay) {
+        overlay.classList.add('hidden');
+        overlay.style.setProperty('display', 'none', 'important');
+      }
+
+      if (typeof window.setAppMode === 'function') {
+        window.setAppMode(initView);
+      }
+
+      // تحديث الحضور في الخلفية بدون تعطيل فتح الشاشة
+      db.collection("user_accounts").doc(matched.id).update({
+        isOnline: true,
+        lastActivePing: Date.now()
+      }).catch(() => {});
+
+    } catch (err) {
+      alert('خطأ أثناء الدخول: ' + err.message);
+    } finally {
+      isLoginRunning = false;
+      if (loginBtn) {
+        loginBtn.disabled = false;
+        loginBtn.innerHTML = oldBtnHtml || '<span>دخول للنظام</span>';
+      }
+    }
+  };
+
+})();
+</script>
 </body>
 </html>
