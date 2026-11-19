@@ -7000,5 +7000,58 @@
   runStrictQrScanMode();
 })();
 </script>
+<script>
+(function fixChartCanvasCrashAndLoginFlow() {
+
+  function safeDestroyCanvasChart(canvas) {
+    if (!canvas || typeof Chart === 'undefined') return;
+    try {
+      const existing = Chart.getChart(canvas);
+      if (existing) existing.destroy();
+    } catch (e) {}
+    try {
+      if (Chart.instances && typeof Chart.instances === 'object') {
+        Object.keys(Chart.instances).forEach(key => {
+          const inst = Chart.instances[key];
+          if (inst && inst.canvas === canvas) {
+            try { inst.destroy(); } catch (err) {}
+          }
+        });
+      }
+    } catch (e) {}
+  }
+
+  const _origRenderDynChart = window.renderDynamicDashboardChart;
+  window.renderDynamicDashboardChart = function() {
+    try {
+      const canvas = document.getElementById('leaderWeeklyExpenseCanvas');
+      if (canvas) safeDestroyCanvasChart(canvas);
+      if (typeof _origRenderDynChart === 'function') {
+        return _origRenderDynChart.apply(this, arguments);
+      }
+    } catch (e) {
+      console.warn('Safe Chart Render Catch:', e);
+    }
+  };
+
+  // تأمين رندر اللوحة الرئيسية وعدم توقفه لأي سبب
+  const _origRenderLeader = window.renderLeaderDashboard;
+  window.renderLeaderDashboard = function() {
+    try {
+      if (typeof _origRenderLeader === 'function') {
+        _origRenderLeader.apply(this, arguments);
+      }
+    } catch (e) {
+      console.warn('Safe Leader Render Catch:', e);
+    }
+    try {
+      if (typeof window.renderDynamicDashboardChart === 'function') {
+        window.renderDynamicDashboardChart();
+      }
+    } catch (e) {}
+  };
+
+})();
+</script>
 </body>
 </html>
