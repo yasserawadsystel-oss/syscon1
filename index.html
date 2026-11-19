@@ -2,6 +2,51 @@
 <html lang="ar" dir="rtl" data-theme="dark">
 <head>
   <meta charset="UTF-8">
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
+<script>
+(function forceLatestBuildAndCleanOldCache() {
+  const APP_BUILD_VERSION = "SYSCON_V2026_11_19_FINAL";
+  const savedBuild = localStorage.getItem("syscon_app_build_ver");
+
+  // 1. مسح أي Service Worker قديم أو Cache Storage قديم فوراً
+  if ("serviceWorker" in navigator) {
+    navigator.serviceWorker.getRegistrations().then(function(regs) {
+      regs.forEach(function(reg) { reg.unregister(); });
+    }).catch(function() {});
+  }
+  if ("caches" in window) {
+    caches.keys().then(function(names) {
+      names.forEach(function(name) { caches.delete(name); });
+    }).catch(function() {});
+  }
+
+  // 2. إذا كان اليوزر يفتح لأول مرة بعد التحديث الجديد:
+  // ننظف مفاتيح الجلسات والكاش القديم ونعمل Reload نظيف مرة واحدة بالنسخة الجديدة
+  if (savedBuild !== APP_BUILD_VERSION) {
+    [
+      "systel_active_user_session",
+      "systel_app_persistent_session_v2",
+      "systel_clearances_store",
+      "systel_manpower_clean_v3",
+      "systel_manpower_v2_store",
+      "systel_manpower_data_store",
+      "syscon_locked_tech_roles"
+    ].forEach(function(k) {
+      try { localStorage.removeItem(k); } catch (e) {}
+    });
+
+    try { localStorage.setItem("syscon_app_build_ver", APP_BUILD_VERSION); } catch (e) {}
+
+    // إعادة تحميل الصفحة من السيرفر مباشرة بدون كاش (مرة واحدة فقط)
+    if (!window.location.search.includes("v=" + APP_BUILD_VERSION)) {
+      const sep = window.location.search ? "&" : "?";
+      window.location.replace(window.location.pathname + window.location.search + sep + "v=" + APP_BUILD_VERSION);
+    }
+  }
+})();
+</script>
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0">
   <title>SYSCON | منظومة إدارة العمليات والتصفيات المالية - سيستل للاتصالات</title>
   <meta name="theme-color" content="#070d19">
