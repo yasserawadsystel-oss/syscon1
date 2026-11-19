@@ -7053,5 +7053,547 @@
 
 })();
 </script>
+<script>
+(function fixLeaderDashboardDataAndManpowerComplete() {
+
+  function normText(v) {
+    return String(v || '')
+      .replace(/^(م|مهندس|eng|تيم ليدر|ليدر|الليدر)[\.\s\/\-:]+/gi, '')
+      .replace(/[أإآ]/g, 'ا').replace(/ة/g, 'ه').replace(/ى/g, 'ي')
+      .replace(/\s+/g, ' ').trim().toLowerCase();
+  }
+
+  function esc(s) {
+    if (s === null || s === undefined) return '';
+    return String(s)
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+  }
+
+  // =========================================================================
+  // 1. ضمان ظهور كل التصفيات لمدير النظام والإدارة العليا في (الإدارة والاعتماد)
+  // =========================================================================
+  function isMasterOrExecNow() {
+    const em = String(window.currentUser?.email || '').toLowerCase().trim();
+    const title = String(window.currentUser?.jobTitle || '').toUpperCase().trim();
+    return (
+      em === 'yasser.awad.systel@gmail.com' ||
+      em === 'yasser.awad.systel@gmail.co' ||
+      em === 'mohamed.mounir@systel.com.eg' ||
+      em === 'nasser.baset@systel.com.eg' ||
+      em === 'mohamed.samih@systel.com.eg' ||
+      ['CEO', 'CTO', 'COO', 'مدير النظام'].includes(title)
+    );
+  }
+
+  function getVisibleLeaderSheetsNow() {
+    const all = Array.isArray(window.cachedClearancesList) ? window.cachedClearancesList : [];
+    if (isMasterOrExecNow()) return all;
+
+    const myId = String(window.currentUser?.id || '').trim();
+    const myEmail = String(window.currentUser?.email || '').toLowerCase().trim();
+    const myName = normText(window.currentUser?.name || '');
+
+    return all.filter(s => {
+      if (!s) return false;
+      const lId = String(s.teamLeaderId || '').trim();
+      const lEm = String(s.teamLeaderEmail || '').toLowerCase().trim();
+      const lNm = normText(s.teamLeader || '');
+      if (myId && lId && myId === lId) return true;
+      if (myEmail && lEm && myEmail === lEm) return true;
+      if (myName && lNm && (lNm === myName || lNm.includes(myName) || myName.includes(lNm))) return true;
+      return false;
+    });
+  }
+
+  function formatDisplayCodeNow(s) {
+    if (!s) return 'SYS-0000';
+    const raw = String(s.sheetNumber || '').trim();
+    if (/^SYS-\d+$/i.test(raw)) return raw.toUpperCase();
+    if (raw.toUpperCase().startsWith('SYS-')) {
+      const last = raw.split('-').pop();
+      if (/^\d+$/.test(last)) return `SYS-${last}`;
+    }
+    return `SYS-${String(s.createdAt || Date.now()).slice(-6)}`;
+  }
+
+  function formatFullNameNow(s) {
+    if (!s) return '-';
+    if (s.clearanceName && String(s.clearanceName).trim()) return String(s.clearanceName).trim();
+    return `${s.siteName || 'Site'} - ${formatDisplayCodeNow(s)}`;
+  }
+
+  function calcDaysNow(s) {
+    const parseD = str => {
+      if (!str) return null;
+      const c = String(str).trim();
+      const m1 = c.match(/^(\d{1,2})[\/\-\.](\d{1,2})[\/\-\.](\d{4})/);
+      if (m1) return new Date(+m1[3], +m1[2] - 1, +m1[1]);
+      const m2 = c.match(/^(\d{4})[\/\-\.](\d{1,2})[\/\-\.](\d{1,2})/);
+      if (m2) return new Date(+m2[1], +m2[2] - 1, +m2[3]);
+      return null;
+    };
+    const d1 = parseD(s?.startDate);
+    const d2 = parseD(s?.endDate);
+    if (d1 && d2 && !isNaN(d1) && !isNaN(d2)) {
+      const diff = Math.round((d2 - d1) / 86400000) + 1;
+      if (diff >= 1 && diff <= 90) return diff;
+    }
+    return 1;
+  }
+
+  function stageHtmlNow(s) {
+    const st = String(s.status || '').toUpperCase().trim();
+    if (st === 'REJECTED' || s.isRejected) {
+      const rsn = s.cancelReason || s.rejectionReason || s.technicalReturnReason || 'مراجعة البيانات';
+      return `<span class="px-2.5 py-0.5 rounded-full text-[10px] font-black bg-rose-950 text-rose-300 border border-rose-700">مرجعة للتعديل</span><div class="text-[10px] text-amber-300 mt-0.5">${esc(rsn)}</div>`;
+    }
+    if (s.deliveredToAccounts || s.hrConfirmed) {
+      return `<span class="px-2.5 py-1 rounded-full text-[10.5px] font-black bg-emerald-950 text-emerald-300 border border-emerald-600">مؤرشفة ومُسلّمة للحسابات</span>`;
+    }
+    if (s.cooApproved) {
+      return `<span class="px-2.5 py-1 rounded-full text-[10.5px] font-black bg-blue-950 text-blue-300 border border-blue-600">بانتظار الصرف المالي (HR)</span>`;
+    }
+    if (s.technicalApproved) {
+      return `<span class="px-2.5 py-1 rounded-full text-[10.5px] font-black bg-indigo-950 text-indigo-300 border border-indigo-600">بانتظار اعتماد COO</span>`;
+    }
+    if (st === 'APPROVED' || s.isApproved || s.signatureData) {
+      return `<span class="px-2.5 py-1 rounded-full text-[10.5px] font-black bg-sky-950 text-sky-300 border border-sky-600">بانتظار الإدارة الفنية</span>`;
+    }
+    return `<span class="px-2.5 py-1 rounded-full text-[10.5px] font-black bg-amber-950 text-amber-300 border border-amber-600">بانتظار التيم ليدر (${esc(s.teamLeader || '-')})</span>`;
+  }
+
+  window.renderLeaderDashboard = function() {
+    const searchQ = (document.getElementById('filterSearch')?.value || '').toLowerCase().trim();
+    const stF = (document.getElementById('filterStatus')?.value || 'ALL').toUpperCase();
+    const deptF = document.getElementById('filterDepartment')?.value || 'ALL';
+    const engF = (document.getElementById('filterEngineer')?.value || 'ALL').toLowerCase().trim();
+    const fromV = document.getElementById('leaderDateFrom')?.value || '';
+    const toV = document.getElementById('leaderDateTo')?.value || '';
+
+    const baseList = getVisibleLeaderSheetsNow();
+
+    const filtered = baseList.filter(s => {
+      if (fromV || toV) {
+        const raw = String(s.startDate || '').trim();
+        let ms = s.createdAt || 0;
+        const m1 = raw.match(/^(\d{1,2})[\/\-\.](\d{1,2})[\/\-\.](\d{4})/);
+        if (m1) ms = new Date(+m1[3], +m1[2] - 1, +m1[1]).getTime();
+        if (fromV && ms < new Date(fromV + 'T00:00:00').getTime()) return false;
+        if (toV && ms > new Date(toV + 'T23:59:59').getTime()) return false;
+      }
+      const st = String(s.status || 'PENDING').toUpperCase();
+      if (stF !== 'ALL' && st !== stF) return false;
+      if (deptF !== 'ALL' && s.department !== deptF) return false;
+      if (engF !== 'all') {
+        const sub = String(s.submittedByEngineer || '').toLowerCase().trim();
+        const mem = String(s.teamMembers || '').toLowerCase();
+        if (sub !== engF && !mem.includes(engF)) return false;
+      }
+      if (searchQ) {
+        const hay = `${formatFullNameNow(s)} ${s.siteName || ''} ${s.region || ''} ${s.department || ''} ${s.submittedByEngineer || ''} ${s.teamLeader || ''}`.toLowerCase();
+        if (!hay.includes(searchQ)) return false;
+      }
+      return true;
+    });
+
+    let tAdv = 0, tExp = 0, pend = 0;
+    filtered.forEach(s => {
+      tAdv += parseFloat(s.advanceAmount) || 0;
+      tExp += (s.items || []).reduce((a, b) => a + (parseFloat(b.amount) || 0), 0);
+      if (String(s.status || 'PENDING').toUpperCase() === 'PENDING') pend++;
+    });
+    const net = tAdv - tExp;
+
+    const setT = (id, v) => { const el = document.getElementById(id); if (el) el.innerText = v; };
+    setT('statTotalAdvance', tAdv.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
+    setT('statTotalExpenses', tExp.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
+    setT('statNetBalance', Math.abs(net).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
+    setT('statPendingCount', pend);
+    setT('badgePendingCount', pend);
+    setT('tableCountBadge', `${filtered.length} استمارة`);
+
+    const usersCount = (window.cachedUsersList || []).filter(u => !u.isSystemConfigDoc).length;
+    if (usersCount > 0) setT('statEngineersCount', usersCount);
+
+    const tbody = document.getElementById('leaderTableBody');
+    const emptyEl = document.getElementById('tableEmptyState');
+    if (tbody && emptyEl) {
+      if (filtered.length === 0) {
+        tbody.innerHTML = '';
+        emptyEl.classList.remove('hidden');
+      } else {
+        emptyEl.classList.add('hidden');
+        tbody.innerHTML = filtered.map(s => {
+          const exp = (s.items || []).reduce((a, b) => a + (parseFloat(b.amount) || 0), 0);
+          const adv = parseFloat(s.advanceAmount) || 0;
+          const bal = adv - exp;
+          const fullTitle = formatFullNameNow(s);
+          const codeOnly = formatDisplayCodeNow(s);
+          const days = calcDaysNow(s);
+
+          return `
+            <tr class="hover:bg-slate-800/40 transition">
+              <td class="py-3 px-4">
+                <div class="font-bold text-white font-mono">${esc(fullTitle)}</div>
+                <div class="text-[10px] text-sky-400 font-mono">كود: ${esc(codeOnly)} • ${esc(s.region || '-')}</div>
+              </td>
+              <td class="py-3 px-4 text-sky-300 font-bold">
+                ${esc(s.department || '-')}
+                <div class="text-[10px] text-slate-400 font-normal">${esc(s.activityType || '-')} (${days} يوم)</div>
+              </td>
+              <td class="py-3 px-4">
+                <div class="font-bold text-white">${esc(s.submittedByEngineer || '-')}</div>
+                <div class="text-[10px] text-amber-300 font-bold">ليدر: ${esc(s.teamLeader || '-')}</div>
+              </td>
+              <td class="py-3 px-4 font-bold text-white font-mono">${adv.toLocaleString()} ج.م</td>
+              <td class="py-3 px-4 font-bold text-sky-400 font-mono">${exp.toLocaleString()} ج.م</td>
+              <td class="py-3 px-4 font-bold font-mono ${bal >= 0 ? 'text-emerald-400' : 'text-rose-400'}">${bal.toLocaleString()} ج.م</td>
+              <td class="py-3 px-4">${stageHtmlNow(s)}</td>
+              <td class="py-3 px-4 text-center">
+                <div class="flex items-center justify-center gap-1.5 flex-wrap">
+                  <button type="button" onclick="openClearanceReview('${s.id}', false)" class="sys-btn-sm bg-sky-600 hover:bg-sky-500 text-white">فحص</button>
+                  <button type="button" onclick="cancelClearanceSheet('${s.id}')" class="sys-btn-sm bg-amber-600 hover:bg-amber-500 text-white">إرجاع</button>
+                  ${isMasterOrExecNow() ? `<button type="button" onclick="deleteClearanceSheet('${s.id}')" class="sys-btn-sm bg-rose-700 hover:bg-rose-600 text-white">حذف</button>` : ''}
+                </div>
+              </td>
+            </tr>
+          `;
+        }).join('');
+      }
+    }
+
+    if (typeof window.renderDynamicDashboardChart === 'function') {
+      try { window.renderDynamicDashboardChart(); } catch (e) {}
+    }
+  };
+
+  // =========================================================================
+  // 2. تشغيل Manpower بأثر رجعي + تفاصيل المصاريف + الفنيين + السواقين
+  // =========================================================================
+  window.mpRawData = window.mpRawData || [];
+  window.mpEvaluatedExtraGroups = window.mpEvaluatedExtraGroups || [];
+  let mpRegionState = 'ALL';
+  let mpAscState = true;
+  let mpChartInst = null;
+
+  function isUpMp(s) {
+    if (s?.sectorZone === 'UP') return true;
+    if (s?.sectorZone === 'DE') return false;
+    const t = `${s?.siteName || ''} ${s?.region || ''}`.toUpperCase();
+    return ['UP', 'صعيد', 'أسيوط', 'اسيوط', 'سوهاج', 'المنيا', 'منيا', 'قنا', 'أسوان', 'اسوان', 'الأقصر', 'الاقصر', 'بني سويف', 'الفيوم'].some(k => t.includes(k));
+  }
+
+  function extractTechAndDriver(s) {
+    const rawMembers = Array.isArray(s.teamMembers) ? s.teamMembers.join(' ') : String(s.teamMembers || '');
+    const tokens = rawMembers.split(/\s*[_–—\-/،,|]+\s*|[,،|]+/).map(x => x.trim()).filter(Boolean);
+    const techs = [];
+    const drivers = [];
+
+    tokens.forEach(tok => {
+      const low = tok.toLowerCase();
+      if (low.includes('سائق') || low.includes('سواق') || low.includes('driver')) {
+        drivers.push(tok.replace(/\s*(سائق\s*(ملاكي|النقل|نقل)?|سواق|driver)\s*/gi, '').trim() || tok);
+      } else {
+        const clean = tok.replace(/\b(فنيين|فني|tech|technician)\b/gi, '').trim();
+        if (clean.length >= 2) techs.push(clean);
+      }
+    });
+
+    (s.items || []).forEach(it => {
+      const cat = String(it.category || '').trim();
+      const desc = String(it.description || '').trim();
+      if ((cat.includes('سيارة') || cat.includes('نقل') || desc.includes('سائق') || desc.includes('سواق')) && desc && desc !== '-') {
+        if (!drivers.some(d => d.includes(desc))) drivers.push(desc);
+      }
+    });
+
+    return {
+      technicians: techs.join(' ، ') || rawMembers || '-',
+      drivers: drivers.join(' ، ') || '-'
+    };
+  }
+
+  function buildExpenseDetailsText(s) {
+    if (!Array.isArray(s.items) || s.items.length === 0) return '-';
+    return s.items.map(it => {
+      const cat = String(it.category || '').trim();
+      const amt = parseFloat(it.amount) || 0;
+      const desc = String(it.description || '').trim();
+      if (!amt && !desc) return '';
+      return `${cat}${(desc && desc !== '-') ? ` (${desc})` : ''}: ${amt.toLocaleString()} ج.م`;
+    }).filter(Boolean).join(' | ') || '-';
+  }
+
+  function rebuildManpowerRecordsRetroactive() {
+    const sheets = Array.isArray(window.cachedClearancesList) ? window.cachedClearancesList : [];
+    const excelOnly = (Array.isArray(window.mpRawData) ? window.mpRawData : []).filter(x => !x._fromClearance);
+
+    const synced = sheets.map(s => {
+      const td = extractTechAndDriver(s);
+      const expDetails = buildExpenseDetailsText(s);
+      const adv = parseFloat(s.advanceAmount) || 0;
+      const exp = (s.items || []).reduce((a, b) => a + (parseFloat(b.amount) || 0), 0);
+      const net = adv - exp;
+
+      const rawDate = String(s.startDate || '').trim();
+      let dateStr = rawDate || '-';
+      let monthStr = 'أخرى';
+      const m1 = rawDate.match(/^(\d{1,2})[\/\-\.](\d{1,2})[\/\-\.](\d{4})/);
+      if (m1) {
+        dateStr = `${m1[3]}-${String(m1[2]).padStart(2, '0')}-${String(m1[1]).padStart(2, '0')}`;
+        const dObj = new Date(+m1[3], +m1[2] - 1, +m1[1]);
+        if (!isNaN(dObj)) monthStr = dObj.toLocaleString('en-US', { month: 'short', year: 'numeric' });
+      } else if (s.createdAt) {
+        const dObj = new Date(s.createdAt);
+        dateStr = dObj.toISOString().slice(0, 10);
+        monthStr = dObj.toLocaleString('en-US', { month: 'short', year: 'numeric' });
+      }
+
+      const site = String(s.siteName || '-').trim();
+      return {
+        _fromClearance: true,
+        sheetId: s.id,
+        sheetCode: formatDisplayCodeNow(s),
+        date: dateStr,
+        month: monthStr,
+        site,
+        code: site,
+        region: isUpMp(s) ? 'UP' : 'DE',
+        department: s.department || '-',
+        engineer: s.submittedByEngineer || '-',
+        teamLeader: s.teamLeader || '-',
+        technicians: td.technicians,
+        drivers: td.drivers,
+        expenseDetails: expDetails,
+        advance: adv,
+        expenses: exp,
+        netBalance: net,
+        stream: s.activityType || '2600_TDD',
+        action: s.activityType || '-'
+      };
+    });
+
+    window.mpRawData = [...synced, ...excelOnly];
+  }
+
+  window.populateMpDropdowns = function() {
+    rebuildManpowerRecordsRetroactive();
+    const months = [...new Set(window.mpRawData.map(x => x.month).filter(Boolean))];
+    const mSel = document.getElementById('mpFilterMonth');
+    if (mSel) {
+      const prev = mSel.value;
+      mSel.innerHTML = `<option value="ALL">جميع الشهور (${months.length})</option>` + months.map(m => `<option value="${esc(m)}">${esc(m)}</option>`).join('');
+      if (months.includes(prev)) mSel.value = prev;
+    }
+    const streams = [...new Set(window.mpRawData.map(x => x.stream).filter(Boolean))];
+    const sSel = document.getElementById('mpFilterStream');
+    if (sSel) {
+      const prev = sSel.value;
+      sSel.innerHTML = `<option value="ALL">جميع أنواع الـ Stream (${streams.length})</option>` + streams.map(s => `<option value="${esc(s)}">${esc(s)}</option>`).join('');
+      if (streams.includes(prev)) sSel.value = prev;
+    }
+  };
+
+  window.setMpRegionFilter = function(reg) {
+    mpRegionState = reg;
+    ['ALL', 'DE', 'UP'].forEach(r => {
+      const b = document.getElementById('mpBtnReg_' + r);
+      if (b) b.className = (r === reg) ? 'px-3 py-1.5 rounded-lg bg-emerald-600 text-white cursor-pointer' : 'px-3 py-1.5 rounded-lg text-slate-400 hover:text-white cursor-pointer';
+    });
+    window.applyManpowerFilters();
+  };
+
+  window.toggleMpSortOrder = function() {
+    mpAscState = !mpAscState;
+    const el = document.getElementById('mpSortOrderText');
+    if (el) el.innerText = mpAscState ? 'تصاعدي (من الأقل للأعلى)' : 'تنازلي (من الأعلى للأقل)';
+    window.applyManpowerFilters();
+  };
+
+  window.applyManpowerFilters = function() {
+    rebuildManpowerRecordsRetroactive();
+    const mF = document.getElementById('mpFilterMonth')?.value || 'ALL';
+    const sF = document.getElementById('mpFilterStream')?.value || 'ALL';
+    const q = (document.getElementById('mpFilterSearch')?.value || '').toLowerCase().trim();
+
+    const filtered = window.mpRawData.filter(d => {
+      if (mpRegionState !== 'ALL' && d.region !== mpRegionState) return false;
+      if (mF !== 'ALL' && d.month !== mF) return false;
+      if (sF !== 'ALL' && d.stream !== sF) return false;
+      if (q) {
+        const hay = `${d.engineer || ''} ${d.teamLeader || ''} ${d.technicians || ''} ${d.drivers || ''} ${d.site || ''} ${d.sheetCode || ''} ${d.expenseDetails || ''} ${d.stream || ''}`.toLowerCase();
+        if (!hay.includes(q)) return false;
+      }
+      return true;
+    });
+
+    // حساب Extra Visits لكل موقع + Stream
+    const groupsMap = {};
+    [...filtered].sort((a, b) => String(a.date || '').localeCompare(String(b.date || ''))).forEach(d => {
+      const k = `${String(d.code || d.site || 'UNK').toUpperCase().trim()}__${String(d.stream || '2600_TDD').trim().toLowerCase()}`;
+      const limit = typeof window.getAllowedVisitsForStream === 'function' ? window.getAllowedVisitsForStream(d.stream) : 1;
+      if (!groupsMap[k]) {
+        groupsMap[k] = { key: k, siteCode: d.code || d.site || '-', region: d.region || 'DE', stream: d.stream || '2600_TDD', allowedLimit: limit, totalVisits: 0, extraVisits: 0, engineers: new Set(), dates: [] };
+      }
+      const g = groupsMap[k];
+      g.totalVisits++;
+      d._visitOrder = g.totalVisits;
+      d._allowed = limit;
+      d._isExtra = g.totalVisits > limit;
+      if (d._isExtra) g.extraVisits++;
+      if (d.engineer) g.engineers.add(d.engineer);
+      if (d.date && d.date !== '-') g.dates.push(d.date);
+    });
+
+    const exceeded = Object.values(groupsMap).filter(g => g.extraVisits > 0).sort((a, b) => (b.extraVisits - a.extraVisits) || (b.totalVisits - a.totalVisits));
+    window.mpEvaluatedExtraGroups = exceeded;
+    const extraSum = exceeded.reduce((a, b) => a + b.extraVisits, 0);
+
+    const setT = (id, v) => { const el = document.getElementById(id); if (el) el.innerText = v; };
+    setT('mpKpiTotalActions', filtered.length);
+    setT('mpKpiTotalDe', filtered.filter(x => x.region === 'DE').length);
+    setT('mpKpiTotalUp', filtered.filter(x => x.region === 'UP').length);
+    setT('mpKpiTotalExtraVisits', extraSum);
+    setT('mpKpiExtraSitesSub', `في ${exceeded.length} موقع`);
+    setT('mpChartScopeBadge', `${filtered.length} أكشن • ${extraSum} Extra`);
+
+    const engMap = {}; const stSet = new Set(); const stCnt = {};
+    filtered.forEach(d => {
+      const e = d.engineer || 'غير محدد';
+      const st = d.stream || '2600_TDD';
+      stSet.add(st); stCnt[st] = (stCnt[st] || 0) + 1;
+      if (!engMap[e]) engMap[e] = { name: e, total: 0, UP: 0, DE: 0, extra: 0, streams: {} };
+      engMap[e].total++;
+      engMap[e][d.region] = (engMap[e][d.region] || 0) + 1;
+      if (d._isExtra) engMap[e].extra++;
+      engMap[e].streams[st] = (engMap[e].streams[st] || 0) + 1;
+    });
+
+    const engArr = Object.values(engMap);
+    setT('mpKpiTotalEngineers', engArr.length);
+    engArr.sort((a, b) => mpAscState ? a.total - b.total : b.total - a.total);
+
+    const topE = [...engArr].sort((a, b) => b.total - a.total)[0];
+    setT('mpKpiTopEngineer', topE ? `${topE.name} (${topE.total})` : '--');
+    const topS = Object.entries(stCnt).sort((a, b) => b[1] - a[1])[0];
+    setT('mpKpiTopStream', topS ? `${topS[0]} (${topS[1]})` : '--');
+
+    // رسم الشارت بأمان
+    const canvas = document.getElementById('manpowerMainChart');
+    if (canvas && typeof Chart !== 'undefined') {
+      try { const prev = Chart.getChart(canvas); if (prev) prev.destroy(); } catch (e) {}
+      if (mpChartInst) { try { mpChartInst.destroy(); } catch (e) {} }
+      const palette = ['#10b981', '#0ea5e9', '#8b5cf6', '#f59e0b', '#ec4899', '#14b8a6', '#f97316', '#6366f1'];
+      const cEngs = engArr.slice(0, 35);
+      const cSts = [...stSet].slice(0, 14);
+      mpChartInst = new Chart(canvas.getContext('2d'), {
+        type: 'bar',
+        data: {
+          labels: cEngs.map(x => x.name),
+          datasets: cSts.map((st, i) => ({ label: st, data: cEngs.map(x => x.streams[st] || 0), backgroundColor: palette[i % palette.length], borderRadius: 4 }))
+        },
+        options: {
+          animation: false, responsive: true, maintainAspectRatio: false,
+          scales: { x: { stacked: true, ticks: { color: '#e2e8f0', font: { family: 'Cairo', size: 11 } } }, y: { stacked: true, beginAtZero: true, ticks: { color: '#94a3b8' } } },
+          plugins: { legend: { labels: { color: '#cbd5e1', font: { family: 'Cairo', size: 11 } } } }
+        }
+      });
+    }
+
+    // جدول Extra Visits
+    const exBody = document.getElementById('mpExtraVisitsTableBody');
+    setT('mpExtraTableCountBadge', `${exceeded.length} موقع متجاوز (+${extraSum})`);
+    if (exBody) {
+      exBody.innerHTML = exceeded.length === 0
+        ? `<tr><td colspan="8" class="py-7 text-center text-emerald-400 font-bold">لا توجد زيارات إضافية متجاوزة للحد في هذا الفلتر.</td></tr>`
+        : exceeded.map((g, i) => `<tr class="hover:bg-rose-950/20">
+            <td class="py-2.5 px-4 text-center font-mono text-slate-400">${i + 1}</td>
+            <td class="py-2.5 px-4 font-mono font-black text-white">${esc(g.siteCode)}</td>
+            <td class="py-2.5 px-4 text-center"><span class="px-2 py-0.5 rounded text-[10px] font-black ${g.region === 'UP' ? 'bg-sky-950 text-sky-300' : 'bg-purple-950 text-purple-300'}">${g.region}</span></td>
+            <td class="py-2.5 px-4 font-bold text-amber-300">${esc(g.stream)}</td>
+            <td class="py-2.5 px-4 text-center font-black text-white">${g.totalVisits}</td>
+            <td class="py-2.5 px-4 text-center font-bold text-emerald-400">${g.allowedLimit}</td>
+            <td class="py-2.5 px-4 text-center"><span class="px-2.5 py-0.5 rounded-full bg-rose-600 text-white font-black">+${g.extraVisits}</span></td>
+            <td class="py-2.5 px-4 text-[11px]"><div class="font-bold">${esc([...g.engineers].join(' ، '))}</div><div class="font-mono text-[10px] text-slate-400">${esc(g.dates.slice(0, 4).join(' | '))}</div></td>
+          </tr>`).join('');
+    }
+
+    // جدول التصفيات والـ Manpower الشامل (فنيون، سائقون، تفاصيل المصاريف، عهدة، منصرف، صافي)
+    const mpSection = document.getElementById('viewManpower');
+    const mpTable = mpSection?.querySelectorAll('table')[1];
+    if (mpTable) {
+      const theadRow = mpTable.querySelector('thead tr');
+      if (theadRow) {
+        theadRow.innerHTML = `
+          <th class="py-3 px-3 text-center">#</th>
+          <th class="py-3 px-3">الكود / التصفية</th>
+          <th class="py-3 px-3">المهندس والليدر</th>
+          <th class="py-3 px-3">الفنيون (Technicians)</th>
+          <th class="py-3 px-3">السائقون (Drivers)</th>
+          <th class="py-3 px-3 text-center">UP</th>
+          <th class="py-3 px-3 text-center">DE</th>
+          <th class="py-3 px-3 text-center text-rose-400">Extra</th>
+          <th class="py-3 px-3">تفاصيل المصاريف</th>
+          <th class="py-3 px-3 text-center">العهدة / المنصرف / الصافي</th>
+        `;
+      }
+      const mpBody = mpTable.querySelector('tbody');
+      setT('mpTableRowsCount', `${filtered.length} سجل`);
+      if (mpBody) {
+        mpBody.innerHTML = filtered.length === 0
+          ? `<tr><td colspan="10" class="py-8 text-center text-slate-500 font-bold">لا توجد بيانات مطابقة.</td></tr>`
+          : filtered.slice(0, 250).map((d, idx) => {
+              const adv = parseFloat(d.advance || 0);
+              const exp = parseFloat(d.expenses || 0);
+              const net = adv - exp;
+              return `
+                <tr class="hover:bg-slate-800/40 ${d._isExtra ? 'bg-rose-950/15' : ''}">
+                  <td class="py-2.5 px-3 text-center font-mono text-slate-400">${idx + 1}</td>
+                  <td class="py-2.5 px-3 font-mono font-bold text-white">
+                    ${esc(d.site || '-')}
+                    <div class="text-[10px] text-sky-400">${esc(d.sheetCode || '-')} • ${esc(d.date || '-')}</div>
+                  </td>
+                  <td class="py-2.5 px-3">
+                    <div class="font-bold text-white">${esc(d.engineer || '-')}</div>
+                    <div class="text-[10px] text-amber-300">ليدر: ${esc(d.teamLeader || '-')}</div>
+                  </td>
+                  <td class="py-2.5 px-3 text-cyan-300 font-bold max-w-[180px] whitespace-normal">${esc(d.technicians || '-')}</td>
+                  <td class="py-2.5 px-3 text-emerald-300 font-bold max-w-[150px] whitespace-normal">${esc(d.drivers || '-')}</td>
+                  <td class="py-2.5 px-3 text-center font-mono font-bold text-sky-400">${d.region === 'UP' ? 1 : 0}</td>
+                  <td class="py-2.5 px-3 text-center font-mono font-bold text-purple-400">${d.region === 'DE' ? 1 : 0}</td>
+                  <td class="py-2.5 px-3 text-center font-mono font-black ${d._isExtra ? 'text-rose-400' : 'text-slate-500'}">${d._isExtra ? '+' + (d._visitOrder - d._allowed) : '0'}</td>
+                  <td class="py-2.5 px-3 text-[11px] text-slate-200 max-w-[260px] whitespace-normal">${esc(d.expenseDetails || '-')}</td>
+                  <td class="py-2.5 px-3 text-center font-mono text-[11px] whitespace-nowrap">
+                    <div class="text-white font-bold">عهدة: ${adv.toLocaleString()}</div>
+                    <div class="text-sky-400 font-bold">منصرف: ${exp.toLocaleString()}</div>
+                    <div class="${net >= 0 ? 'text-emerald-400' : 'text-rose-400'} font-black">صافي: ${net.toLocaleString()}</div>
+                  </td>
+                </tr>
+              `;
+            }).join('');
+      }
+    }
+  };
+
+  // تحديث فوري عند وصول أي تصفية أو فتح تبويب Manpower / الإدارة والاعتماد
+  if (typeof db !== 'undefined') {
+    db.collection("clearance_sheets").onSnapshot(() => {
+      setTimeout(() => {
+        rebuildManpowerRecordsRetroactive();
+        if (window.currentUser?.activeViewMode === 'leader') window.renderLeaderDashboard();
+        if (window.currentUser?.activeViewMode === 'manpower') window.applyManpowerFilters();
+      }, 200);
+    });
+  }
+
+  setTimeout(() => {
+    rebuildManpowerRecordsRetroactive();
+    if (window.currentUser?.activeViewMode === 'leader') window.renderLeaderDashboard();
+    if (window.currentUser?.activeViewMode === 'manpower') window.applyManpowerFilters();
+  }, 450);
+
+})();
+</script>
 </body>
 </html>
