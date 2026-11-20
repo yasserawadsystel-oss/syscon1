@@ -22,6 +22,7 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/exceljs@4.3.0/dist/exceljs.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/file-saver@2.0.5/dist/FileSaver.min.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
@@ -38,6 +39,7 @@
     };
     if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
     const db = firebase.firestore();
+    db.enablePersistence({ synchronizeTabs: true }).catch(() => {});
   </script>
 
   <style>
@@ -572,7 +574,7 @@
               <button type="button" onclick="toggleAuthMode('forgot')" class="text-[11px] font-bold text-sky-400 hover:text-sky-300 underline cursor-pointer">نسيت كلمة المرور؟</button>
             </div>
           </div>
-          <input type="password" id="loginPassword" placeholder="••••••••" class="sys-input w-full px-3.5 py-2.5">
+          <input type="password" id="loginPassword" onkeydown="if(event.key==='Enter')handleLoginSubmit()" placeholder="••••••••" class="sys-input w-full px-3.5 py-2.5">
         </div>
 
         <button type="button" onclick="handleLoginSubmit()" class="sys-btn w-full h-11 bg-gradient-to-r from-sky-600 to-blue-600 hover:from-sky-500 hover:to-blue-500 text-white text-sm shadow-lg">
@@ -1704,7 +1706,7 @@
           <button type="button" onclick="setDirectoryFilterMode('ENGINEER')" id="dirFilterBtn_ENGINEER" class="sys-btn-sm bg-slate-800 text-slate-300 hover:bg-slate-700">مهندس موقع</button>
         </div>
         <div class="relative flex-1 min-w-[200px] max-w-xs">
-          <input type="text" id="dirSearchInputBox" oninput="dirSearchQueryText = this.value; renderEngineersDirectoryTable();" placeholder="بحث بالاسم، الموبايل، أو الإيميل..." class="sys-input w-full px-3 py-1.5">
+          <input type="text" id="dirSearchInputBox" oninput="setDirSearchQuery(this.value)" placeholder="بحث بالاسم، الموبايل، أو الإيميل..." class="sys-input w-full px-3 py-1.5">
         </div>
       </div>
 
@@ -2200,10 +2202,60 @@
         .replace(/\s+/g, ' ').trim().toLowerCase();
     }
 
+    function sha256PureJs(str) {
+      const bytes = new TextEncoder().encode(str);
+      const K = [
+        0x428a2f98,0x71374491,0xb5c0fbcf,0xe9b5dba5,0x3956c25b,0x59f111f1,0x923f82a4,0xab1c5ed5,
+        0xd807aa98,0x12835b01,0x243185be,0x550c7dc3,0x72be5d74,0x80deb1fe,0x9bdc06a7,0xc19bf174,
+        0xe49b69c1,0xefbe4786,0x0fc19dc6,0x240ca1cc,0x2de92c6f,0x4a7484aa,0x5cb0a9dc,0x76f988da,
+        0x983e5152,0xa831c66d,0xb00327c8,0xbf597fc7,0xc6e00bf3,0xd5a79147,0x06ca6351,0x14292967,
+        0x27b70a85,0x2e1b2138,0x4d2c6dfc,0x53380d13,0x650a7354,0x766a0abb,0x81c2c92e,0x92722c85,
+        0xa2bfe8a1,0xa81a664b,0xc24b8b70,0xc76c51a3,0xd192e819,0xd6990624,0xf40e3585,0x106aa070,
+        0x19a4c116,0x1e376c08,0x2748774c,0x34b0bcb5,0x391c0cb3,0x4ed8aa4a,0x5b9cca4f,0x682e6ff3,
+        0x748f82ee,0x78a5636f,0x84c87814,0x8cc70208,0x90befffa,0xa4506ceb,0xbef9a3f7,0xc67178f2
+      ];
+      let H = [0x6a09e667,0xbb67ae85,0x3c6ef372,0xa54ff53a,0x510e527f,0x9b05688c,0x1f83d9ab,0x5be0cd19];
+      const bitLen = bytes.length * 8;
+      const paddedLen = Math.ceil((bytes.length + 9) / 64) * 64;
+      const padded = new Uint8Array(paddedLen);
+      padded.set(bytes);
+      padded[bytes.length] = 0x80;
+      const view = new DataView(padded.buffer);
+      view.setUint32(paddedLen - 8, Math.floor(bitLen / 0x100000000), false);
+      view.setUint32(paddedLen - 4, bitLen >>> 0, false);
+      const rotr = (n, x) => (x >>> n) | (x << (32 - n));
+      const W = new Uint32Array(64);
+      for (let i = 0; i < paddedLen; i += 64) {
+        for (let t = 0; t < 16; t++) W[t] = view.getUint32(i + t * 4, false);
+        for (let t = 16; t < 64; t++) {
+          const s0 = rotr(7, W[t - 15]) ^ rotr(18, W[t - 15]) ^ (W[t - 15] >>> 3);
+          const s1 = rotr(17, W[t - 2]) ^ rotr(19, W[t - 2]) ^ (W[t - 2] >>> 10);
+          W[t] = (W[t - 16] + s0 + W[t - 7] + s1) >>> 0;
+        }
+        let [a, b, c, d, e, f, g, h] = H;
+        for (let t = 0; t < 64; t++) {
+          const S1 = rotr(6, e) ^ rotr(11, e) ^ rotr(25, e);
+          const ch = (e & f) ^ (~e & g);
+          const temp1 = (h + S1 + ch + K[t] + W[t]) >>> 0;
+          const S0 = rotr(2, a) ^ rotr(13, a) ^ rotr(22, a);
+          const maj = (a & b) ^ (a & c) ^ (b & c);
+          const temp2 = (S0 + maj) >>> 0;
+          h = g; g = f; f = e; e = (d + temp1) >>> 0;
+          d = c; c = b; b = a; a = (temp1 + temp2) >>> 0;
+        }
+        H = [(H[0]+a)>>>0,(H[1]+b)>>>0,(H[2]+c)>>>0,(H[3]+d)>>>0,(H[4]+e)>>>0,(H[5]+f)>>>0,(H[6]+g)>>>0,(H[7]+h)>>>0];
+      }
+      return H.map(x => x.toString(16).padStart(8, '0')).join('');
+    }
+
     async function hashPassword(plain) {
-      const buf = new TextEncoder().encode(String(plain).trim());
-      const hBuf = await crypto.subtle.digest('SHA-256', buf);
-      return 'sha256$' + Array.from(new Uint8Array(hBuf)).map(b => b.toString(16).padStart(2, '0')).join('');
+      const clean = String(plain).trim();
+      if (window.crypto && window.crypto.subtle && typeof window.crypto.subtle.digest === 'function') {
+        const buf = new TextEncoder().encode(clean);
+        const hBuf = await crypto.subtle.digest('SHA-256', buf);
+        return 'sha256$' + Array.from(new Uint8Array(hBuf)).map(b => b.toString(16).padStart(2, '0')).join('');
+      }
+      return 'sha256$' + sha256PureJs(clean);
     }
 
     function normalizePhone(p) {
@@ -2664,7 +2716,7 @@
         document.getElementById('headerUserName').textContent = window.currentUser.name;
         document.getElementById('headerUserRole').textContent = window.currentUser.jobTitle;
         document.getElementById('m_approvedBy').textContent = window.currentUser.name;
-        document.getElementById('loginOverlay').classList.add('hidden');
+        const _ov = document.getElementById('loginOverlay'); if (_ov) { _ov.style.removeProperty('display'); _ov.classList.add('hidden'); _ov.classList.remove('flex'); }
         applyRoleUI();
         setAppMode(window.currentUser.activeViewMode || 'leader');
         startHeartbeat();
@@ -3502,7 +3554,7 @@
           <td class="py-2 px-3"><input type="text" value="${escapeHtml(it.description || '')}" oninput="updateEngItem(${idx}, 'description', this.value)" class="sys-input w-full px-2 py-1"></td>
           <td class="py-2 px-3 font-mono text-slate-400">
             <div>${escapeHtml(it.invoiceNumber || '-')}</div>
-            ${it.receiptImage ? `<button type="button" onclick="previewReceiptModal(engineerCurrentItems[${idx}].receiptImage, '${escapeHtml(it.category)}')" class="mt-1 sys-btn-sm bg-emerald-950 text-emerald-300 border border-emerald-700 text-[10px]">عرض الفاتورة</button>` : ''}
+            ${it.receiptImage ? `<button type="button" onclick="previewEngineerDraftReceipt(${idx})" class="mt-1 sys-btn-sm bg-emerald-950 text-emerald-300 border border-emerald-700 text-[10px]">عرض الفاتورة</button>` : ''}
           </td>
           <td class="py-2 px-3 text-left"><input type="number" value="${it.amount}" oninput="updateEngItem(${idx}, 'amount', this.value)" class="sys-input w-24 px-2 py-1 text-center font-black"></td>
           <td class="py-2 px-3 text-center"><button type="button" onclick="removeEngItem(${it.id})" class="text-rose-400 hover:text-rose-300 font-black cursor-pointer"><i data-lucide="x" class="lucide-inline"></i></button></td>
@@ -5367,7 +5419,7 @@
               <button type="button" onclick="setKpiFilter('SORT','BOM_DESC')" class="sys-btn-sm ${kpiSortMode === 'BOM_DESC' ? 'bg-purple-600 text-white' : 'bg-slate-900 text-slate-300'}">الأعلى خامات</button>
               <button type="button" onclick="setKpiFilter('SORT','VISITS_DESC')" class="sys-btn-sm ${kpiSortMode === 'VISITS_DESC' ? 'bg-amber-500 text-slate-950' : 'bg-slate-900 text-slate-300'}">الأكثر زيارات</button>
             </div>
-            <input type="text" value="${escapeHtml(kpiSearchText)}" oninput="kpiSearchText = this.value; renderKpiAndBomDashboard();" placeholder="بحث بكود الموقع أو الخامة..." class="sys-input px-3 py-1.5 w-52">
+            <input type="text" value="${escapeHtml(kpiSearchText)}" oninput="setKpiSearchText(this.value)" placeholder="بحث بكود الموقع أو الخامة..." class="sys-input px-3 py-1.5 w-52">
           </div>
 
           <div class="overflow-x-auto max-h-[480px] rounded-xl border border-slate-800">
@@ -5865,7 +5917,11 @@
         list.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
         window.cachedClearancesList = list;
         lastKnownClearancesCount = list.length;
+        window._sysconClearancesLoaded = true;
 
+        if (typeof window.onClearancesUpdatedHook === 'function') {
+          window.onClearancesUpdatedHook();
+        }
         renderAllViews();
 
         const clrModal = document.getElementById('clearanceModal');
@@ -5914,7 +5970,8 @@
 
         if (window.currentUser.id) {
           const me = users.find(u => u.id === window.currentUser.id);
-          if (!me) { window.handleLogout(); return; }
+          if (users.length > 0 && !me) { window.handleLogout(); return; }
+          if (!me) return;
           if (me.isOnline === false && me.activeSessionDeviceId === null && me.forceLogoutCommandAt) { window.handleLogout(); return; }
           window.currentUser.permissions = Object.assign({}, getRoleTemplate(isMasterAdmin(me.email) ? 'admin' : me.role), me.permissions || {});
           window.currentUser.jobTitle = getJobTitle(me.email, me.role, me.jobTitle);
@@ -5980,6 +6037,33 @@
       applyRoleUI();
     });
 
+    window.isUpSheet = isUpSheet;
+    window.calculateEngineerTotals = calcEngTotals;
+    window.saveEngineerFormDraft = saveDraft;
+    window.hashSysconPassword = hashPassword;
+    window.applySysconRoleUI = applyRoleUI;
+    window.startSysconHeartbeat = startHeartbeat;
+    window.stopSysconHeartbeat = function() {
+      if (heartbeatTimer) { clearInterval(heartbeatTimer); heartbeatTimer = null; }
+    };
+    window.renderAllSysconViews = renderAllViews;
+    window.renderSysconWeeklyChart = renderWeeklyChart;
+    window.getSysconRoleTemplate = getRoleTemplate;
+    window.getSysconJobTitle = getJobTitle;
+    window.renderKpiAndBomDashboard = renderKpiAndBomDashboard;
+    window.setKpiSearchText = function(val) {
+      kpiSearchText = val || '';
+      renderKpiAndBomDashboard();
+    };
+    window.setDirSearchQuery = function(val) {
+      dirSearchQuery = val || '';
+      renderEngineersDirectoryTable();
+    };
+    window.previewEngineerDraftReceipt = function(idx) {
+      const it = engineerCurrentItems[idx];
+      if (it && it.receiptImage) previewReceiptModal(it.receiptImage, it.category || 'فاتورة');
+    };
+
   })();
   </script>
 <style>
@@ -6003,24 +6087,312 @@
 </style>
 
 <script>
-(function applyThreeFinalFixesSyscon() {
+(function sysconUnifiedMasterPatch() {
+  "use strict";
 
-  function normArFix(s) {
-    return String(s || '')
+  const PERSIST_KEY = "systel_active_user_session_v3";
+  const EXEC_EMAILS = [
+    'yasser.awad.systel@gmail.com',
+    'yasser.awad.systel@gmail.co',
+    'mohamed.mounir@systel.com.eg',
+    'nasser.baset@systel.com.eg',
+    'mohamed.samih@systel.com.eg'
+  ];
+
+  function esc(s) {
+    if (s === null || s === undefined) return '';
+    return String(s)
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+  }
+
+  function normAr(v) {
+    return String(v || '')
       .replace(/^(م|مهندس|eng|تيم ليدر|ليدر|الليدر)[\.\s\/\-:]+/gi, '')
       .replace(/[أإآ]/g, 'ا').replace(/ة/g, 'ه').replace(/ى/g, 'ي')
       .replace(/\s+/g, ' ').trim().toLowerCase();
   }
 
-  function escFix(str) {
-    if (str === null || str === undefined) return '';
-    return String(str)
-      .replace(/&/g, '&amp;').replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+  function cleanPhone(p) {
+    let d = String(p || '').replace(/[٠-٩]/g, c => '٠١٢٣٤٥٦٧٨٩'.indexOf(c)).replace(/\D/g, '');
+    if (d.startsWith('0020')) d = '0' + d.slice(4);
+    else if (d.startsWith('20') && d.length === 12) d = '0' + d.slice(2);
+    return d;
+  }
+
+  function isMasterOrExec() {
+    const em = String(window.currentUser?.email || '').toLowerCase().trim();
+    const title = String(window.currentUser?.jobTitle || '').toUpperCase().trim();
+    return EXEC_EMAILS.includes(em) || ['CEO', 'CTO', 'COO', 'مدير النظام'].includes(title);
+  }
+
+  function isLeaderSelf(s) {
+    if (!s || typeof s !== 'object') return false;
+    if (s.sheetType === 'LEADER_DIRECT' || s.isLeaderDirect === true) return true;
+    const leader = normAr(s.teamLeader || s.leaderName || s.leader || '');
+    const eng = normAr(s.submittedByEngineer || s.engineerName || '');
+    const members = normAr(Array.isArray(s.teamMembers) ? s.teamMembers.join(' ') : (s.teamMembers || ''));
+    if (!leader || leader.length < 3) return false;
+    if (eng && eng === leader) return true;
+    if (members && members.split(/[,،\-\/\|]+/).map(x => normAr(x)).includes(leader)) return true;
+    return false;
+  }
+
+  function isUpZone(s) {
+    if (typeof window.isUpSheet === 'function') return window.isUpSheet(s);
+    if (s?.sectorZone === 'UP') return true;
+    if (s?.sectorZone === 'DE') return false;
+    const t = `${s?.siteName || ''} ${s?.region || ''}`.toUpperCase();
+    return ['UP', 'صعيد', 'أسيوط', 'اسيوط', 'سوهاج', 'المنيا', 'منيا', 'قنا', 'أسوان', 'اسوان', 'الأقصر', 'الاقصر', 'بني سويف', 'الفيوم'].some(k => t.includes(k));
+  }
+
+  function fmtCode(s) {
+    if (!s) return 'SYS-0000';
+    const raw = String(s.sheetNumber || '').trim();
+    if (/^SYS-\d+$/i.test(raw)) return raw.toUpperCase();
+    if (raw.toUpperCase().startsWith('SYS-')) {
+      const last = raw.split('-').pop();
+      if (/^\d+$/.test(last)) return `SYS-${last}`;
+    }
+    return `SYS-${String(s.createdAt || Date.now()).slice(-6)}`;
+  }
+
+  function fmtFullName(s) {
+    if (!s) return '-';
+    if (s.clearanceName && String(s.clearanceName).trim()) return String(s.clearanceName).trim();
+    return `${s.siteName || 'Site'} - ${fmtCode(s)}`;
+  }
+
+  function calcDays(s) {
+    const parseD = str => {
+      if (!str) return null;
+      const c = String(str).trim();
+      const m1 = c.match(/^(\d{1,2})[\/\-\.](\d{1,2})[\/\-\.](\d{4})/);
+      if (m1) return new Date(+m1[3], +m1[2] - 1, +m1[1]);
+      const m2 = c.match(/^(\d{4})[\/\-\.](\d{1,2})[\/\-\.](\d{1,2})/);
+      if (m2) return new Date(+m2[1], +m2[2] - 1, +m2[3]);
+      return null;
+    };
+    const d1 = parseD(s?.startDate), d2 = parseD(s?.endDate);
+    if (d1 && d2 && !isNaN(d1) && !isNaN(d2)) {
+      const diff = Math.round((d2 - d1) / 86400000) + 1;
+      if (diff >= 1 && diff <= 90) return diff;
+    }
+    return 1;
   }
 
   // =========================================================================
-  // أولاً: إبقاء كافة الأختام داخل حدود التصفية (في المعاينة والطباعة والـ PDF)
+  // 1. تسجيل الخروج الفوري المضمون (بدون تعليق ولا اختفاء شاشة الدخول)
+  // =========================================================================
+  window.handleLogout = function() {
+    const uid = window.currentUser?.id;
+
+    if (typeof window.stopSysconHeartbeat === 'function') {
+      window.stopSysconHeartbeat();
+    }
+    localStorage.removeItem(PERSIST_KEY);
+
+    window.currentUser = {
+      id: '', name: '', email: '', phone: '',
+      role: 'leader', loginSelectedRole: 'leader',
+      jobTitle: 'تيم ليدر', isApproved: false,
+      activeViewMode: 'leader', permissions: {}
+    };
+
+    const hName = document.getElementById('headerUserName');
+    const hRole = document.getElementById('headerUserRole');
+    if (hName) hName.textContent = 'لم يتم الدخول';
+    if (hRole) hRole.textContent = '-';
+    document.getElementById('onlineUsersTopBar')?.classList.add('hidden');
+
+    const overlay = document.getElementById('loginOverlay');
+    if (overlay) {
+      overlay.style.removeProperty('display');
+      overlay.classList.remove('hidden');
+      overlay.classList.add('flex');
+    }
+    if (typeof window.toggleAuthMode === 'function') window.toggleAuthMode('login');
+
+    if (uid && typeof db !== 'undefined') {
+      db.collection("user_accounts").doc(uid).update({
+        isOnline: false,
+        activeSessionDeviceId: null,
+        lastActivePing: 0
+      }).catch(() => {});
+    }
+  };
+
+  // =========================================================================
+  // 2. تسجيل الدخول السريع والمستقر مع تحميل الصلاحيات والـ UI فوراً
+  // =========================================================================
+  let isLoginBusy = false;
+
+  window.handleLoginSubmit = async function() {
+    if (isLoginBusy) return;
+    const ident = (document.getElementById('loginUsername')?.value || '').trim();
+    const pwd = (document.getElementById('loginPassword')?.value || '').trim();
+    if (!ident || !pwd) return alert('يرجى إدخال بيانات الحساب وكلمة المرور.');
+
+    const btn = document.querySelector('#formLogin button[onclick*="handleLoginSubmit"]');
+    const origHtml = btn ? btn.innerHTML : '';
+    isLoginBusy = true;
+    if (btn) {
+      btn.disabled = true;
+      btn.innerHTML = '<span>جاري التحقق والدخول...</span>';
+    }
+
+    try {
+      const hPwd = typeof window.hashSysconPassword === 'function'
+        ? await window.hashSysconPassword(pwd)
+        : pwd;
+      const key = ident.toLowerCase();
+      const keyPh = cleanPhone(ident);
+      let matched = null;
+
+      // 1) البحث السريع في الكاش المحمل
+      if (Array.isArray(window.cachedUsersList) && window.cachedUsersList.length > 0) {
+        const hit = window.cachedUsersList.find(u => {
+          if (!u || u.isSystemConfigDoc) return false;
+          const em = String(u.email || '').toLowerCase().trim();
+          const nm = String(u.name || u.fullName || '').toLowerCase().trim();
+          const p1 = cleanPhone(u.phone || '');
+          const p2 = cleanPhone(u.mobile || '');
+          return (em && em === key) || (nm && nm === key) || (keyPh.length >= 10 && (p1 === keyPh || p2 === keyPh));
+        });
+        if (hit) {
+          try {
+            const fresh = await db.collection("user_accounts").doc(hit.id).get();
+            matched = fresh.exists ? { id: fresh.id, ...fresh.data() } : hit;
+          } catch (e) { matched = hit; }
+        }
+      }
+
+      // 2) استعلام مباشر في Firestore بدون تحميل الـ Manpower
+      if (!matched) {
+        if (key.includes('@')) {
+          const qs = await db.collection("user_accounts").where("email", "==", key).limit(1).get();
+          qs.forEach(d => { matched = { id: d.id, ...d.data() }; });
+        } else if (keyPh.length === 11) {
+          const qs = await db.collection("user_accounts").where("phone", "==", keyPh).limit(1).get();
+          qs.forEach(d => { matched = { id: d.id, ...d.data() }; });
+        }
+      }
+
+      // 3) احتياطي لو المستخدم كتب اسمه بالعربي
+      if (!matched) {
+        const snap = await db.collection("user_accounts").get();
+        snap.forEach(doc => {
+          if (matched) return;
+          const u = doc.data();
+          if (!u || u.isSystemConfigDoc) return;
+          const em = String(u.email || '').toLowerCase().trim();
+          const nm = String(u.name || u.fullName || '').toLowerCase().trim();
+          const p1 = cleanPhone(u.phone || '');
+          const p2 = cleanPhone(u.mobile || '');
+          if ((em && em === key) || (nm && nm === key) || (keyPh.length >= 10 && (p1 === keyPh || p2 === keyPh))) {
+            matched = { id: doc.id, ...u };
+          }
+        });
+      }
+
+      if (!matched) return alert('هذا الحساب غير مسجل بالنظام.');
+
+      const savedPass = String(matched.password || matched.pass || '').trim();
+      if (savedPass && savedPass !== hPwd && savedPass !== pwd) {
+        return alert('كلمة المرور غير صحيحة.');
+      }
+
+      const em = String(matched.email || '').toLowerCase().trim();
+      const isExec = EXEC_EMAILS.includes(em);
+      if (!isExec && matched.isApproved !== true) {
+        return alert('الحساب بانتظار موافقة وتفعيل الإدارة.');
+      }
+
+      if (savedPass === pwd && !savedPass.startsWith('sha256$')) {
+        db.collection("user_accounts").doc(matched.id).update({ password: hPwd }).catch(() => {});
+      }
+
+      const rStr = String(matched.role || '').toLowerCase();
+      const tStr = String(matched.jobTitle || '').toLowerCase();
+      const actualRole = isExec ? 'leader'
+        : ((rStr === 'hr' || tStr.includes('hr') || tStr.includes('مالية') || tStr.includes('حسابات')) ? 'hr'
+        : ((rStr === 'technical' || tStr.includes('فنية') || tStr.includes('فني')) ? 'technical'
+        : (rStr === 'leader' ? 'leader' : 'engineer')));
+
+      const selectedBtn = window.currentUser?.loginSelectedRole || actualRole;
+      if (!isExec) {
+        if (selectedBtn === 'leader' && actualRole !== 'leader') return alert('هذا الحساب غير مسجل كتيم ليدر — اختر بوابتك الصحيحة من الأعلى.');
+        if (selectedBtn === 'hr' && actualRole !== 'hr') return alert('هذا الحساب غير مسجل بالمراجعة المالية HR — اختر بوابتك الصحيحة من الأعلى.');
+        if (selectedBtn === 'technical' && actualRole !== 'technical') return alert('هذا الحساب غير مسجل بالإدارة الفنية — اختر بوابتك الصحيحة من الأعلى.');
+        if (selectedBtn === 'engineer' && actualRole !== 'engineer') return alert('هذا الحساب غير مسجل كمهندس موقع — اختر بوابتك الصحيحة من الأعلى.');
+      }
+
+      const basePerms = typeof window.getSysconRoleTemplate === 'function'
+        ? window.getSysconRoleTemplate(isExec ? 'admin' : actualRole)
+        : {};
+      const mergedPerms = Object.assign({}, basePerms, matched.permissions || {});
+      const jobTitle = typeof window.getSysconJobTitle === 'function'
+        ? window.getSysconJobTitle(em, actualRole, matched.jobTitle)
+        : (matched.jobTitle || (isExec ? 'مدير النظام' : 'تيم ليدر'));
+
+      let initView = 'engineer';
+      if (isExec) initView = (selectedBtn === 'hr' ? 'hr' : (selectedBtn === 'technical' ? 'technical' : 'leader'));
+      else if (actualRole === 'hr') initView = 'hr';
+      else if (actualRole === 'technical') initView = 'technical';
+      else if (actualRole === 'leader') initView = 'leader';
+
+      const devId = localStorage.getItem("systel_device_id") || ('DEV_' + Date.now());
+      db.collection("user_accounts").doc(matched.id).update({
+        isOnline: true,
+        activeSessionDeviceId: devId,
+        lastActivePing: Date.now(),
+        forceLogoutCommandAt: null
+      }).catch(() => {});
+
+      window.currentUser = {
+        id: matched.id,
+        name: matched.name || matched.fullName || ident,
+        email: em,
+        phone: matched.phone || matched.mobile || '',
+        role: actualRole === 'hr' ? 'leader' : actualRole,
+        loginSelectedRole: selectedBtn,
+        jobTitle,
+        isApproved: true,
+        activeViewMode: initView,
+        permissions: mergedPerms
+      };
+
+      localStorage.setItem(PERSIST_KEY, JSON.stringify(window.currentUser));
+
+      document.getElementById('headerUserName').textContent = window.currentUser.name;
+      document.getElementById('headerUserRole').textContent = window.currentUser.jobTitle;
+      const apprEl = document.getElementById('m_approvedBy');
+      if (apprEl) apprEl.textContent = window.currentUser.name;
+
+      const overlay = document.getElementById('loginOverlay');
+      if (overlay) {
+        overlay.style.removeProperty('display');
+        overlay.classList.add('hidden');
+        overlay.classList.remove('flex');
+      }
+
+      if (typeof window.startSysconHeartbeat === 'function') window.startSysconHeartbeat();
+      if (typeof window.applySysconRoleUI === 'function') window.applySysconRoleUI();
+      if (typeof window.setAppMode === 'function') window.setAppMode(initView);
+      if (typeof window.renderAllSysconViews === 'function') window.renderAllSysconViews();
+    } catch (err) {
+      alert('خطأ أثناء الدخول: ' + err.message);
+    } finally {
+      isLoginBusy = false;
+      if (btn) {
+        btn.disabled = false;
+        btn.innerHTML = origHtml;
+      }
+    }
+  };
+
+  // =========================================================================
+  // 3. إبقاء الأختام داخل حدود التصفية
   // =========================================================================
   function keepStampsInsideSheetBounds() {
     const stampsRow = document.getElementById('officialStampsRow');
@@ -6028,7 +6400,6 @@
     stampsRow.style.setProperty('flex-wrap', 'wrap', 'important');
     stampsRow.style.setProperty('justify-content', 'flex-start', 'important');
     stampsRow.style.setProperty('gap', '6px', 'important');
-
     stampsRow.querySelectorAll('.approval-stamp-card').forEach(card => {
       if (!card.classList.contains('hidden')) {
         card.style.setProperty('width', '126px', 'important');
@@ -6038,48 +6409,161 @@
     });
   }
 
-  const _origOpenReviewBound = window.openClearanceReview;
+  const _origOpenReview = window.openClearanceReview;
   window.openClearanceReview = function(docId, isReadOnly = false) {
-    if (typeof _origOpenReviewBound === 'function') {
-      _origOpenReviewBound(docId, isReadOnly);
-    }
+    if (typeof _origOpenReview === 'function') _origOpenReview(docId, isReadOnly);
     setTimeout(keepStampsInsideSheetBounds, 30);
   };
 
   // =========================================================================
-  // ثانياً: ظهور حالة الإرجاع بوضوح في الإدارة الفنية (شغالة 100%)
+  // 4. لوحة الإدارة والاعتماد + مؤشر تحميل واضح + الشارت الأسبوعي
   // =========================================================================
-  function isLeaderSelfFix(s) {
-    if (!s || typeof s !== 'object') return false;
-    if (s.sheetType === 'LEADER_DIRECT' || s.isLeaderDirect === true) return true;
-    const leader = normArFix(s.teamLeader || s.leaderName || s.leader || '');
-    const eng = normArFix(s.submittedByEngineer || s.engineerName || '');
-    const members = normArFix(Array.isArray(s.teamMembers) ? s.teamMembers.join(' ') : (s.teamMembers || ''));
-    if (!leader || leader.length < 3) return false;
-    if (eng && eng === leader) return true;
-    if (members && members.split(/[,،\-\/\|]+/).map(x => normArFix(x)).includes(leader)) return true;
-    return false;
+  function getVisibleLeaderSheets() {
+    const all = Array.isArray(window.cachedClearancesList) ? window.cachedClearancesList : [];
+    if (isMasterOrExec() || window.currentUser?.permissions?.canSeeAllClearances) return all;
+    const myId = String(window.currentUser?.id || '').trim();
+    const myEmail = String(window.currentUser?.email || '').toLowerCase().trim();
+    const myName = normAr(window.currentUser?.name || '');
+
+    return all.filter(s => {
+      if (!s) return false;
+      const lId = String(s.teamLeaderId || '').trim();
+      const lEm = String(s.teamLeaderEmail || '').toLowerCase().trim();
+      const lNm = normAr(s.teamLeader || '');
+      const eId = String(s.engineerUserId || '').trim();
+      const eEm = String(s.engineerEmail || '').toLowerCase().trim();
+      const eNm = normAr(s.submittedByEngineer || '');
+      if (myId && (myId === lId || myId === eId)) return true;
+      if (myEmail && (myEmail === lEm || myEmail === eEm)) return true;
+      if (myName && ((lNm && (lNm === myName || lNm.includes(myName) || myName.includes(lNm))) || (eNm && eNm === myName))) return true;
+      return false;
+    });
   }
 
+  function stageHtml(s) {
+    const st = String(s.status || '').toUpperCase().trim();
+    if (st === 'REJECTED' || s.isRejected) {
+      const rsn = s.cancelReason || s.rejectionReason || s.technicalReturnReason || 'مراجعة البيانات';
+      return `<span class="px-2.5 py-0.5 rounded-full text-[10px] font-black bg-rose-950 text-rose-300 border border-rose-700">مرجعة للتعديل</span><div class="text-[10px] text-amber-300 mt-0.5">${esc(rsn)}</div>`;
+    }
+    if (s.deliveredToAccounts || s.hrConfirmed) return `<span class="px-2.5 py-1 rounded-full text-[10.5px] font-black bg-emerald-950 text-emerald-300 border border-emerald-600">مؤرشفة ومُسلّمة للحسابات</span>`;
+    if (s.cooApproved) return `<span class="px-2.5 py-1 rounded-full text-[10.5px] font-black bg-blue-950 text-blue-300 border border-blue-600">بانتظار الصرف المالي (HR)</span>`;
+    if (isLeaderSelf(s)) return `<span class="px-2.5 py-1 rounded-full text-[10.5px] font-black bg-indigo-950 text-indigo-300 border border-indigo-600">بانتظار اعتماد COO (مسار مباشر)</span>`;
+    if (s.technicalApproved) return `<span class="px-2.5 py-1 rounded-full text-[10.5px] font-black bg-indigo-950 text-indigo-300 border border-indigo-600">بانتظار اعتماد COO</span>`;
+    if (st === 'APPROVED' || s.isApproved || s.signatureData) return `<span class="px-2.5 py-1 rounded-full text-[10.5px] font-black bg-sky-950 text-sky-300 border border-sky-600">بانتظار الإدارة الفنية</span>`;
+    return `<span class="px-2.5 py-1 rounded-full text-[10.5px] font-black bg-amber-950 text-amber-300 border border-amber-600">بانتظار التيم ليدر (${esc(s.teamLeader || '-')})</span>`;
+  }
+
+  window.renderLeaderDashboard = function() {
+    const searchQ = (document.getElementById('filterSearch')?.value || '').toLowerCase().trim();
+    const stF = (document.getElementById('filterStatus')?.value || 'ALL').toUpperCase();
+    const deptF = document.getElementById('filterDepartment')?.value || 'ALL';
+    const engF = (document.getElementById('filterEngineer')?.value || 'ALL').toLowerCase().trim();
+    const baseList = getVisibleLeaderSheets();
+
+    if (typeof window.renderSysconWeeklyChart === 'function') {
+      try { window.renderSysconWeeklyChart(baseList); } catch (e) {}
+    }
+
+    const filtered = baseList.filter(s => {
+      const st = String(s.status || 'PENDING').toUpperCase();
+      if (stF !== 'ALL' && st !== stF) return false;
+      if (deptF !== 'ALL' && s.department !== deptF) return false;
+      if (engF !== 'all') {
+        const sub = String(s.submittedByEngineer || '').toLowerCase().trim();
+        const mem = String(s.teamMembers || '').toLowerCase();
+        if (sub !== engF && !mem.includes(engF)) return false;
+      }
+      if (searchQ) {
+        const hay = `${fmtFullName(s)} ${s.siteName || ''} ${s.region || ''} ${s.department || ''} ${s.submittedByEngineer || ''} ${s.teamLeader || ''}`.toLowerCase();
+        if (!hay.includes(searchQ)) return false;
+      }
+      return true;
+    });
+
+    let tAdv = 0, tExp = 0, pend = 0;
+    filtered.forEach(s => {
+      tAdv += parseFloat(s.advanceAmount) || 0;
+      tExp += (s.items || []).reduce((a, b) => a + (parseFloat(b.amount) || 0), 0);
+      if (String(s.status || 'PENDING').toUpperCase() === 'PENDING') pend++;
+    });
+
+    const setT = (id, v) => { const el = document.getElementById(id); if (el) el.innerText = v; };
+    setT('statTotalAdvance', tAdv.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
+    setT('statTotalExpenses', tExp.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
+    setT('statNetBalance', Math.abs(tAdv - tExp).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
+    setT('statPendingCount', pend);
+    setT('badgePendingCount', pend);
+    setT('tableCountBadge', `${filtered.length} استمارة`);
+
+    const tbody = document.getElementById('leaderTableBody');
+    const emptyEl = document.getElementById('tableEmptyState');
+    if (!tbody || !emptyEl) return;
+
+    if (filtered.length === 0) {
+      tbody.innerHTML = '';
+      const p = emptyEl.querySelector('p');
+      if (p) p.textContent = window._sysconClearancesLoaded ? 'لا توجد تصفيات مطابقة للفلتر الحالي' : 'جاري تحميل البيانات من السحابة...';
+      emptyEl.classList.remove('hidden');
+      return;
+    }
+
+    emptyEl.classList.add('hidden');
+    const canDel = isMasterOrExec() || window.currentUser?.permissions?.canDeleteClearance;
+    const canRej = isMasterOrExec() || window.currentUser?.permissions?.canRejectClearance;
+
+    tbody.innerHTML = filtered.map(s => {
+      const exp = (s.items || []).reduce((a, b) => a + (parseFloat(b.amount) || 0), 0);
+      const adv = parseFloat(s.advanceAmount) || 0;
+      const bal = adv - exp;
+      return `
+        <tr class="hover:bg-slate-800/40 transition">
+          <td class="py-3 px-4">
+            <div class="font-bold text-white font-mono">${esc(fmtFullName(s))}</div>
+            <div class="text-[10px] text-sky-400 font-mono">كود: ${esc(fmtCode(s))} • ${esc(s.region || '-')}</div>
+          </td>
+          <td class="py-3 px-4 text-sky-300 font-bold">
+            ${esc(s.department || '-')}
+            <div class="text-[10px] text-slate-400 font-normal">${esc(s.activityType || '-')} (${calcDays(s)} يوم)</div>
+          </td>
+          <td class="py-3 px-4">
+            <div class="font-bold text-white">${esc(s.submittedByEngineer || '-')}</div>
+            <div class="text-[10px] text-amber-300 font-bold">ليدر: ${esc(s.teamLeader || '-')}</div>
+          </td>
+          <td class="py-3 px-4 font-bold text-white font-mono">${adv.toLocaleString()} ج.م</td>
+          <td class="py-3 px-4 font-bold text-sky-400 font-mono">${exp.toLocaleString()} ج.م</td>
+          <td class="py-3 px-4 font-bold font-mono ${bal >= 0 ? 'text-emerald-400' : 'text-rose-400'}">${bal.toLocaleString()} ج.م</td>
+          <td class="py-3 px-4">${stageHtml(s)}</td>
+          <td class="py-3 px-4 text-center">
+            <div class="flex items-center justify-center gap-1.5 flex-wrap">
+              <button type="button" onclick="openClearanceReview('${s.id}', false)" class="sys-btn-sm bg-sky-600 hover:bg-sky-500 text-white">فحص</button>
+              ${canRej ? `<button type="button" onclick="cancelClearanceSheet('${s.id}')" class="sys-btn-sm bg-amber-600 hover:bg-amber-500 text-white">إرجاع</button>` : ''}
+              ${canDel ? `<button type="button" onclick="deleteClearanceSheet('${s.id}')" class="sys-btn-sm bg-rose-700 hover:bg-rose-600 text-white">حذف</button>` : ''}
+            </div>
+          </td>
+        </tr>
+      `;
+    }).join('');
+  };
+
+  // =========================================================================
+  // 5. الإدارة الفنية مع إظهار حالة الإرجاع بوضوح
+  // =========================================================================
   window.renderTechnicalDashboard = function() {
     const q = (document.getElementById('techFilterSearch')?.value || '').toLowerCase().trim();
     const deptF = document.getElementById('techFilterDept')?.value || 'ALL';
     const allSheets = Array.isArray(window.cachedClearancesList) ? window.cachedClearancesList : [];
+    const validForTech = allSheets.filter(s => !isLeaderSelf(s));
 
-    const validForTech = allSheets.filter(s => !isLeaderSelfFix(s));
-
-    // الوارد للفحص: معتمدة من الليدر ولم تُعتمد فنياً بعد، أو تم إرجاعها للتعديل ولم يُعاد اعتمادها بعد
     const inboxList = validForTech.filter(s => {
       if (s.technicalApproved === true || s.cooApproved === true) return false;
       const st = String(s.status || '').toUpperCase().trim();
       const isLeaderAppr = st === 'APPROVED' || s.isApproved === true || Boolean(s.signatureData);
-      const isReturnedForFix = Boolean(s.technicalReturnReason) || s.returnedByTechnical === true || (st === 'PENDING' && Boolean(s.technicalReturnedAt));
-      return isLeaderAppr || isReturnedForFix;
+      const isReturned = Boolean(s.technicalReturnReason) || s.returnedByTechnical === true || (st === 'PENDING' && Boolean(s.technicalReturnedAt));
+      return isLeaderAppr || isReturned;
     });
 
-    const archiveList = validForTech.filter(s =>
-      (s.technicalApproved === true || s.cooApproved === true) && !s.technicalReturnReason
-    );
+    const archiveList = validForTech.filter(s => (s.technicalApproved === true || s.cooApproved === true) && !s.technicalReturnReason);
 
     const setT = (id, v) => { const el = document.getElementById(id); if (el) el.innerText = v; };
     setT('techStatInboxCount', inboxList.length);
@@ -6096,13 +6580,9 @@
 
     const isArchTab = (document.getElementById('btnTechTabArchive')?.className || '').includes('emerald');
     const src = isArchTab ? archiveList : inboxList;
-
     const filtered = src.filter(s => {
       if (deptF !== 'ALL' && s.department !== deptF) return false;
-      if (q) {
-        const hay = `${s.clearanceName || ''} ${s.siteName || ''} ${s.department || ''} ${s.submittedByEngineer || ''} ${s.teamLeader || ''} ${s.teamMembers || ''} ${s.technicalReturnReason || ''}`.toLowerCase();
-        if (!hay.includes(q)) return false;
-      }
+      if (q && !`${fmtFullName(s)} ${s.siteName || ''} ${s.department || ''} ${s.submittedByEngineer || ''} ${s.teamLeader || ''} ${s.teamMembers || ''} ${s.technicalReturnReason || ''}`.toLowerCase().includes(q)) return false;
       return true;
     });
 
@@ -6110,636 +6590,37 @@
     const tbody = document.getElementById('techTableBody');
     const emptyEl = document.getElementById('techTableEmptyState');
     if (!tbody || !emptyEl) return;
-
-    if (filtered.length === 0) {
-      tbody.innerHTML = '';
-      emptyEl.classList.remove('hidden');
-      return;
-    }
-
+    if (filtered.length === 0) { tbody.innerHTML = ''; emptyEl.classList.remove('hidden'); return; }
     emptyEl.classList.add('hidden');
+
     tbody.innerHTML = filtered.map(s => {
       const mems = Array.isArray(s.teamMembers) ? s.teamMembers : String(s.teamMembers || '').split(/[,،\n]/).map(x => x.trim()).filter(Boolean);
-      const badges = mems.map(m => `<span class="inline-block px-2 py-0.5 rounded bg-slate-950 border border-slate-700 text-slate-200 text-[10px] font-bold m-0.5">${escFix(m)}</span>`).join('');
+      const badges = mems.map(m => `<span class="inline-block px-2 py-0.5 rounded bg-slate-950 border border-slate-700 text-slate-200 text-[10px] font-bold m-0.5">${esc(m)}</span>`).join('');
       const isArch = (s.technicalApproved === true || s.cooApproved === true) && !s.technicalReturnReason;
       const isReturned = !isArch && (Boolean(s.technicalReturnReason) || s.returnedByTechnical === true || (String(s.status || '').toUpperCase() === 'PENDING' && Boolean(s.technicalReturnedAt)));
 
-      let statusHtml = '';
-      if (isArch) {
-        statusHtml = `<span class="px-2.5 py-1 rounded-full text-[10.5px] font-bold bg-emerald-950 text-emerald-300 border border-emerald-700">معتمد فني (${escFix(s.technicalApprovalDate || '')})</span>`;
-      } else if (isReturned) {
-        statusHtml = `<div class="space-y-1">
-          <span class="px-2.5 py-1 rounded-full text-[10.5px] font-black bg-amber-950 text-amber-300 border border-amber-500 inline-block">مرجعة للتعديل من الإدارة الفنية</span>
-          ${s.technicalReturnReason ? `<div class="text-[10px] text-rose-300 font-bold">السبب: ${escFix(s.technicalReturnReason)}</div>` : ''}
-        </div>`;
-      } else {
-        statusHtml = `<span class="px-2.5 py-1 rounded-full text-[10.5px] font-bold bg-sky-950 text-sky-300 border border-sky-700">بانتظار الفحص الفني</span>`;
-      }
+      const statusHtml = isArch
+        ? `<span class="px-2.5 py-1 rounded-full text-[10.5px] font-bold bg-emerald-950 text-emerald-300 border border-emerald-700">معتمد فني (${esc(s.technicalApprovalDate || '')})</span>`
+        : (isReturned
+          ? `<div class="space-y-1"><span class="px-2.5 py-1 rounded-full text-[10.5px] font-black bg-amber-950 text-amber-300 border border-amber-500 inline-block">مرجعة للتعديل من الإدارة الفنية</span>${s.technicalReturnReason ? `<div class="text-[10px] text-rose-300 font-bold">السبب: ${esc(s.technicalReturnReason)}</div>` : ''}</div>`
+          : `<span class="px-2.5 py-1 rounded-full text-[10.5px] font-bold bg-sky-950 text-sky-300 border border-sky-700">بانتظار الفحص الفني</span>`);
 
       return `
         <tr class="hover:bg-slate-800/40 ${isReturned ? 'bg-amber-950/15' : ''}">
-          <td class="py-3 px-4 font-bold text-white font-mono">${escFix(s.clearanceName || `${s.siteName || '-'} - ${s.sheetNumber || ''}`)}<div class="text-[10px] text-slate-400">${escFix(s.region || '-')}</div></td>
-          <td class="py-3 px-4 text-sky-300 font-bold">${escFix(s.department || '-')}<div class="text-[10px] text-slate-400 font-normal">${escFix(s.activityType || '-')}</div></td>
-          <td class="py-3 px-4"><div class="font-bold text-amber-300">${escFix(s.teamLeader || '-')}</div><div class="text-[10px] text-slate-300">${escFix(s.submittedByEngineer || '-')}</div></td>
+          <td class="py-3 px-4 font-bold text-white font-mono">${esc(fmtFullName(s))}<div class="text-[10px] text-slate-400">${esc(s.region || '-')}</div></td>
+          <td class="py-3 px-4 text-sky-300 font-bold">${esc(s.department || '-')}<div class="text-[10px] text-slate-400 font-normal">${esc(s.activityType || '-')}</div></td>
+          <td class="py-3 px-4"><div class="font-bold text-amber-300">${esc(s.teamLeader || '-')}</div><div class="text-[10px] text-slate-300">${esc(s.submittedByEngineer || '-')}</div></td>
           <td class="py-3 px-4 max-w-xs">${badges || '-'}</td>
-          <td class="py-3 px-4 font-mono text-[11px] text-slate-300">${escFix(s.startDate || '-')} ← ${escFix(s.endDate || '-')}</td>
+          <td class="py-3 px-4 font-mono text-[11px] text-slate-300">${esc(s.startDate || '-')} ← ${esc(s.endDate || '-')}</td>
           <td class="py-3 px-4">${statusHtml}</td>
-          <td class="py-3 px-4 text-center">
-            <button type="button" onclick="openClearanceReview('${s.id}', true)" class="sys-btn-sm bg-sky-600 hover:bg-sky-500 text-white">${isArch ? 'عرض' : 'فحص واعتماد'}</button>
-          </td>
+          <td class="py-3 px-4 text-center"><button type="button" onclick="openClearanceReview('${s.id}', true)" class="sys-btn-sm bg-sky-600 hover:bg-sky-500 text-white">${isArch ? 'عرض' : 'فحص واعتماد'}</button></td>
         </tr>
       `;
     }).join('');
   };
 
   // =========================================================================
-  // ثالثاً: تحديث المان باور بأثر رجعي من التصفيات + تفاصيل المصاريف والفنيين والسواقين
-  // =========================================================================
-  function extractTechniciansAndDriversFromSheet(s) {
-    const rawMembers = Array.isArray(s.teamMembers)
-      ? s.teamMembers.join(' ')
-      : String(s.teamMembers || '');
-
-    const rawDetails = Array.isArray(s.items)
-      ? s.items.map(it => `${it.category || ''} ${it.description || ''}`).join(' ')
-      : '';
-
-    const combinedText = `${rawMembers} ${rawDetails}`;
-
-    // فصل الأسماء بأي فاصل شائع (_ أو - أو / أو ، أو مسافات متعددة)
-    const tokens = rawMembers
-      .split(/\s+[_–—\-/،,|]+\s*|[,،|]+/)
-      .map(t => t.trim())
-      .filter(Boolean);
-
-    const drivers = [];
-    const technicians = [];
-
-    tokens.forEach(tok => {
-      const low = tok.toLowerCase();
-      if (low.includes('سائق') || low.includes('driver') || low.includes('سواق')) {
-        drivers.push(tok.replace(/\s*(سائق\s*(ملاكي|النقل|نقل)?|سواق|driver)\s*/gi, '').trim() || tok);
-      } else {
-        // لو فيه كلمة "فنيين" أو "فني" بننظفها ونضيف الاسم
-        const cleanTech = tok.replace(/\b(فنيين|فني|tech|technician)\b/gi, '').trim();
-        if (cleanTech.length >= 2) technicians.push(cleanTech);
-      }
-    });
-
-    // استخراج أي سائق مذكور في تفاصيل المصاريف (مثلاً: تأجير سيارة - أحمد علي)
-    (s.items || []).forEach(it => {
-      const cat = String(it.category || '').trim();
-      const desc = String(it.description || '').trim();
-      if ((cat.includes('سيارة') || cat.includes('نقل') || desc.includes('سائق') || desc.includes('سواق')) && desc && desc !== '-') {
-        if (!drivers.some(d => d.includes(desc))) {
-          drivers.push(desc);
-        }
-      }
-    });
-
-    return {
-      techniciansStr: technicians.join(' ، ') || rawMembers || '-',
-      driversStr: drivers.join(' ، ') || '-'
-    };
-  }
-
-  function buildExpenseDetailsSummary(s) {
-    if (!Array.isArray(s.items) || s.items.length === 0) return '-';
-    return s.items
-      .map(it => {
-        const cat = String(it.category || '').trim();
-        const amt = parseFloat(it.amount) || 0;
-        const desc = String(it.description || '').trim();
-        if (!amt && !desc) return '';
-        const cleanDesc = (desc && desc !== '-') ? ` (${desc})` : '';
-        return `${cat}${cleanDesc}: ${amt.toLocaleString()} ج.م`;
-      })
-      .filter(Boolean)
-      .join(' | ') || '-';
-  }
-
-  function syncClearancesIntoManpowerRetroactive() {
-    const sheets = Array.isArray(window.cachedClearancesList) ? window.cachedClearancesList : [];
-    const baseExcelList = Array.isArray(window.mpRawData)
-      ? window.mpRawData.filter(x => !x._fromClearanceSync)
-      : [];
-
-    const fromSheets = sheets.map(s => {
-      const td = extractTechniciansAndDriversFromSheet(s);
-      const expDetails = buildExpenseDetailsSummary(s);
-      const adv = parseFloat(s.advanceAmount) || 0;
-      const exp = (s.items || []).reduce((a, b) => a + (parseFloat(b.amount) || 0), 0);
-      const net = adv - exp;
-
-      const rawDate = String(s.startDate || '').trim();
-      let dateStr = rawDate || '-';
-      let monthStr = 'أخرى';
-      const m1 = rawDate.match(/^(\d{1,2})[\/\-\.](\d{1,2})[\/\-\.](\d{4})/);
-      if (m1) {
-        dateStr = `${m1[3]}-${String(m1[2]).padStart(2, '0')}-${String(m1[1]).padStart(2, '0')}`;
-        const dObj = new Date(+m1[3], +m1[2] - 1, +m1[1]);
-        if (!isNaN(dObj)) monthStr = dObj.toLocaleString('en-US', { month: 'short', year: 'numeric' });
-      } else if (s.createdAt) {
-        const dObj = new Date(s.createdAt);
-        dateStr = dObj.toISOString().slice(0, 10);
-        monthStr = dObj.toLocaleString('en-US', { month: 'short', year: 'numeric' });
-      }
-
-      const siteRaw = String(s.siteName || '').trim();
-      const upDe = (isUpSheet(s) ? 'UP' : 'DE');
-
-      return {
-        _fromClearanceSync: true,
-        sheetId: s.id,
-        sheetCode: s.sheetNumber || '-',
-        date: dateStr,
-        month: monthStr,
-        site: siteRaw || '-',
-        code: siteRaw || '-',
-        region: upDe,
-        department: s.department || '-',
-        engineer: s.submittedByEngineer || '-',
-        teamLeader: s.teamLeader || '-',
-        technicians: td.techniciansStr,
-        drivers: td.driversStr,
-        expenseDetails: expDetails,
-        advance: adv,
-        expenses: exp,
-        netBalance: net,
-        stream: s.activityType || '2600_TDD',
-        action: s.activityType || '-'
-      };
-    });
-
-    window.mpRawData = [...fromSheets, ...baseExcelList];
-  }
-
-  function enhanceManpowerTableWithDetailsAndDrivers() {
-    const mpSection = document.getElementById('viewManpower');
-    if (!mpSection) return;
-
-    const mpTable = mpSection.querySelectorAll('table')[1];
-    if (!mpTable) return;
-
-    const theadRow = mpTable.querySelector('thead tr');
-    if (theadRow && !theadRow.querySelector('.th-mp-extra-cols')) {
-      theadRow.innerHTML = `
-        <th class="py-3 px-3 text-center">#</th>
-        <th class="py-3 px-3">الكود / التصفية</th>
-        <th class="py-3 px-3">المهندس والليدر</th>
-        <th class="py-3 px-3">الفنيون (Technicians)</th>
-        <th class="py-3 px-3">السائقون (Drivers)</th>
-        <th class="py-3 px-3 text-center">UP</th>
-        <th class="py-3 px-3 text-center">DE</th>
-        <th class="py-3 px-3 text-center">الأكشنات</th>
-        <th class="py-3 px-3 text-center text-rose-400">Extra</th>
-        <th class="py-3 px-3">تفاصيل المصاريف</th>
-        <th class="py-3 px-3 text-center">العهدة / المنصرف / الصافي</th>
-      `;
-    }
-
-    const q = (document.getElementById('mpFilterSearch')?.value || '').toLowerCase().trim();
-    const mF = document.getElementById('mpFilterMonth')?.value || 'ALL';
-    const sF = document.getElementById('mpFilterStream')?.value || 'ALL';
-    const regActive = (document.getElementById('mpBtnReg_UP')?.className || '').includes('emerald') ? 'UP'
-      : ((document.getElementById('mpBtnReg_DE')?.className || '').includes('emerald') ? 'DE' : 'ALL');
-
-    const filtered = (window.mpRawData || []).filter(d => {
-      if (regActive !== 'ALL' && d.region !== regActive) return false;
-      if (mF !== 'ALL' && d.month !== mF) return false;
-      if (sF !== 'ALL' && d.stream !== sF) return false;
-      if (q) {
-        const hay = `${d.engineer || ''} ${d.teamLeader || ''} ${d.technicians || ''} ${d.drivers || ''} ${d.site || ''} ${d.sheetCode || ''} ${d.expenseDetails || ''}`.toLowerCase();
-        if (!hay.includes(q)) return false;
-      }
-      return true;
-    });
-
-    const tbody = mpTable.querySelector('tbody');
-    if (!tbody) return;
-
-    const countEl = document.getElementById('mpTableRowsCount');
-    if (countEl) countEl.innerText = `${filtered.length} سجل`;
-
-    if (filtered.length === 0) {
-      tbody.innerHTML = `<tr><td colspan="11" class="py-8 text-center text-slate-500 font-bold">لا توجد بيانات مطابقة.</td></tr>`;
-      return;
-    }
-
-    // حساب تكرار كل موقع + stream لتحديد Extra Visit
-    const visitCounter = {};
-    [...filtered].sort((a, b) => String(a.date || '').localeCompare(String(b.date || ''))).forEach(d => {
-      const k = `${String(d.code || d.site || '').toUpperCase().trim()}__${String(d.stream || '').toLowerCase().trim()}`;
-      visitCounter[k] = (visitCounter[k] || 0) + 1;
-      const limit = typeof window.getAllowedVisitsForStream === 'function' ? window.getAllowedVisitsForStream(d.stream) : 1;
-      d._isExtraRow = visitCounter[k] > limit;
-    });
-
-    tbody.innerHTML = filtered.slice(0, 200).map((d, idx) => {
-      const adv = parseFloat(d.advance || 0);
-      const exp = parseFloat(d.expenses || 0);
-      const net = adv - exp;
-      return `
-        <tr class="hover:bg-slate-800/40 ${d._isExtraRow ? 'bg-rose-950/15' : ''}">
-          <td class="py-2.5 px-3 text-center font-mono text-slate-400">${idx + 1}</td>
-          <td class="py-2.5 px-3 font-mono font-bold text-white">
-            ${escFix(d.site || '-')}
-            <div class="text-[10px] text-sky-400">${escFix(d.sheetCode || '-')} • ${escFix(d.date || '-')}</div>
-          </td>
-          <td class="py-2.5 px-3">
-            <div class="font-bold text-white">${escFix(d.engineer || '-')}</div>
-            <div class="text-[10px] text-amber-300">ليدر: ${escFix(d.teamLeader || '-')}</div>
-          </td>
-          <td class="py-2.5 px-3 text-cyan-300 font-bold max-w-[180px] whitespace-normal">${escFix(d.technicians || '-')}</td>
-          <td class="py-2.5 px-3 text-emerald-300 font-bold max-w-[150px] whitespace-normal">${escFix(d.drivers || '-')}</td>
-          <td class="py-2.5 px-3 text-center font-mono font-bold text-sky-400">${d.region === 'UP' ? 1 : 0}</td>
-          <td class="py-2.5 px-3 text-center font-mono font-bold text-purple-400">${d.region === 'DE' ? 1 : 0}</td>
-          <td class="py-2.5 px-3 text-center font-mono font-black text-white">1</td>
-          <td class="py-2.5 px-3 text-center font-mono font-black ${d._isExtraRow ? 'text-rose-400' : 'text-slate-500'}">${d._isExtraRow ? '+1' : '0'}</td>
-          <td class="py-2.5 px-3 text-[11px] text-slate-200 max-w-[260px] whitespace-normal">${escFix(d.expenseDetails || '-')}</td>
-          <td class="py-2.5 px-3 text-center font-mono text-[11px] whitespace-nowrap">
-            <div class="text-white font-bold">عهدة: ${adv.toLocaleString()}</div>
-            <div class="text-sky-400 font-bold">منصرف: ${exp.toLocaleString()}</div>
-            <div class="${net >= 0 ? 'text-emerald-400' : 'text-rose-400'} font-black">صافي: ${net.toLocaleString()}</div>
-          </td>
-        </tr>
-      `;
-    }).join('');
-  }
-
-  const _origApplyMp = window.applyManpowerFilters;
-  window.applyManpowerFilters = function() {
-    syncClearancesIntoManpowerRetroactive();
-    if (typeof _origApplyMp === 'function') {
-      _origApplyMp.apply(this, arguments);
-    }
-    enhanceManpowerTableWithDetailsAndDrivers();
-  };
-
-  const _origExportMp = window.exportManpowerDataToExcel;
-  window.exportManpowerDataToExcel = function() {
-    syncClearancesIntoManpowerRetroactive();
-    if (Array.isArray(window.mpRawData) && window.mpRawData.some(x => x._fromClearanceSync) && typeof ExcelJS !== 'undefined') {
-      const rows = [[
-        '#', 'الكود', 'الموقع', 'المنطقة', 'القسم', 'التاريخ', 'الشهر',
-        'المهندس', 'التيم ليدر', 'الفنيون', 'السائقون', 'النشاط / Stream',
-        'تفاصيل المصاريف', 'العهدة (ج.م)', 'المنصرف (ج.م)', 'الصافي (ج.م)'
-      ]];
-      window.mpRawData.forEach((d, idx) => {
-        rows.push([
-          idx + 1, d.sheetCode || '-', d.site || '-', d.region || '-', d.department || '-',
-          d.date || '-', d.month || '-', d.engineer || '-', d.teamLeader || '-',
-          d.technicians || '-', d.drivers || '-', d.stream || '-',
-          d.expenseDetails || '-', parseFloat(d.advance || 0), parseFloat(d.expenses || 0), parseFloat(d.netBalance || 0)
-        ]);
-      });
-      const wb = new ExcelJS.Workbook();
-      const ws = wb.addWorksheet('Manpower Full', { views: [{ rightToLeft: true, showGridLines: true }] });
-      ws.addRow(rows[0]);
-      rows.slice(1).forEach(r => ws.addRow(r));
-      ws.columns.forEach(c => { c.width = 22; });
-      wb.xlsx.writeBuffer().then(buf => {
-        saveAs(new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }), `SYSCON_Manpower_Details_${new Date().toLocaleDateString('en-GB').replace(/\//g, '-')}.xlsx`);
-      });
-      return;
-    }
-    if (typeof _origExportMp === 'function') _origExportMp();
-  };
-
-  // تحديث فوري عند وصول أي بيانات جديدة من Firebase
-  if (typeof db !== 'undefined') {
-    db.collection("clearance_sheets").onSnapshot(() => {
-      setTimeout(() => {
-        syncClearancesIntoManpowerRetroactive();
-        if (window.currentUser?.activeViewMode === 'technical') window.renderTechnicalDashboard();
-        if (window.currentUser?.activeViewMode === 'manpower') window.applyManpowerFilters();
-      }, 250);
-    });
-  }
-
-  setTimeout(() => {
-    syncClearancesIntoManpowerRetroactive();
-    keepStampsInsideSheetBounds();
-    if (window.currentUser?.activeViewMode === 'technical') window.renderTechnicalDashboard();
-    if (window.currentUser?.activeViewMode === 'manpower') window.applyManpowerFilters();
-  }, 500);
-
-})();
-</script>
-<script>
-(function ensureBackButtonsEverywhere() {
-
-  function injectBackButtonToFullReportModal() {
-    const modalCard = document.querySelector('#fullReportModal > div');
-    if (!modalCard) return;
-
-    if (!document.getElementById('fullReportBottomBackBar')) {
-      const footerBar = document.createElement('div');
-      footerBar.id = 'fullReportBottomBackBar';
-      footerBar.className = 'bg-slate-950 px-4 md:px-6 py-3.5 border-t border-slate-800 flex items-center justify-between gap-2 no-print shrink-0';
-      footerBar.innerHTML = `
-        <button type="button" onclick="closeFullSystemReportModal()" class="sys-btn bg-slate-800 hover:bg-slate-700 text-sky-300 border border-slate-700">
-          <i data-lucide="arrow-right" class="lucide-inline"></i><span>رجوع إلى اللوحة</span>
-        </button>
-        <button type="button" onclick="closeFullSystemReportModal()" class="sys-btn-sm bg-slate-900 hover:bg-slate-800 text-slate-400 hover:text-white">
-          إغلاق
-        </button>
-      `;
-      modalCard.appendChild(footerBar);
-      if (window.lucide && typeof window.lucide.createIcons === 'function') {
-        window.lucide.createIcons();
-      }
-    }
-  }
-
-  function injectBackButtonsToDynamicModals() {
-    const dynamicModalIds = [
-      'siteBomModal',
-      'mpEngineerDetailsModal',
-      'mpSheetPickerModal',
-      'mpAddModal',
-      'engineerWalletModal',
-      'cashAdvanceLedgerModal',
-      'masterPermissionsModal',
-      'changePasswordSelfModal',
-      'receiptPreviewModal'
-    ];
-
-    dynamicModalIds.forEach(id => {
-      const modal = document.getElementById(id);
-      if (!modal) return;
-      const card = modal.querySelector(':scope > div');
-      if (!card || card.querySelector('.sys-auto-back-footer')) return;
-
-      const footer = document.createElement('div');
-      footer.className = 'sys-auto-back-footer pt-3 border-t border-slate-800 flex items-center justify-end gap-2 no-print';
-      footer.innerHTML = `
-        <button type="button" onclick="document.getElementById('${id}')?.remove()" class="sys-btn-sm bg-slate-800 hover:bg-slate-700 text-sky-300 border border-slate-700">
-          <i data-lucide="arrow-right" class="lucide-inline"></i><span>رجوع</span>
-        </button>
-      `;
-      card.appendChild(footer);
-      if (window.lucide && typeof window.lucide.createIcons === 'function') {
-        window.lucide.createIcons();
-      }
-    });
-  }
-
-  window.addEventListener('keydown', function(e) {
-    if (e.key === 'Escape') {
-      const fullRep = document.getElementById('fullReportModal');
-      if (fullRep && !fullRep.classList.contains('hidden') && typeof closeFullSystemReportModal === 'function') {
-        closeFullSystemReportModal();
-        return;
-      }
-      const clrMod = document.getElementById('clearanceModal');
-      if (clrMod && !clrMod.classList.contains('hidden') && typeof closeClearanceModal === 'function') {
-        closeClearanceModal();
-        return;
-      }
-      const notifMod = document.getElementById('notificationsModal');
-      if (notifMod && !notifMod.classList.contains('hidden') && typeof closeNotificationsModal === 'function') {
-        closeNotificationsModal();
-        return;
-      }
-      const engMod = document.getElementById('engineersModal');
-      if (engMod && !engMod.classList.contains('hidden') && typeof closeEngineersDirectoryModal === 'function') {
-        closeEngineersDirectoryModal();
-        return;
-      }
-      const audMod = document.getElementById('auditLogsModal');
-      if (audMod && !audMod.classList.contains('hidden') && typeof closeAuditLogsModal === 'function') {
-        closeAuditLogsModal();
-        return;
-      }
-    }
-  });
-
-  injectBackButtonToFullReportModal();
-  setInterval(() => {
-    injectBackButtonToFullReportModal();
-    injectBackButtonsToDynamicModals();
-  }, 600);
-
-})();
-</script>
-<script>
-(function fixLeaderDashboardDataAndManpowerComplete() {
-
-  function normText(v) {
-    return String(v || '')
-      .replace(/^(م|مهندس|eng|تيم ليدر|ليدر|الليدر)[\.\s\/\-:]+/gi, '')
-      .replace(/[أإآ]/g, 'ا').replace(/ة/g, 'ه').replace(/ى/g, 'ي')
-      .replace(/\s+/g, ' ').trim().toLowerCase();
-  }
-
-  function esc(s) {
-    if (s === null || s === undefined) return '';
-    return String(s)
-      .replace(/&/g, '&amp;').replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
-  }
-
-  // =========================================================================
-  // 1. ضمان ظهور كل التصفيات لمدير النظام والإدارة العليا في (الإدارة والاعتماد)
-  // =========================================================================
-  function isMasterOrExecNow() {
-    const em = String(window.currentUser?.email || '').toLowerCase().trim();
-    const title = String(window.currentUser?.jobTitle || '').toUpperCase().trim();
-    return (
-      em === 'yasser.awad.systel@gmail.com' ||
-      em === 'yasser.awad.systel@gmail.co' ||
-      em === 'mohamed.mounir@systel.com.eg' ||
-      em === 'nasser.baset@systel.com.eg' ||
-      em === 'mohamed.samih@systel.com.eg' ||
-      ['CEO', 'CTO', 'COO', 'مدير النظام'].includes(title)
-    );
-  }
-
-  function getVisibleLeaderSheetsNow() {
-    const all = Array.isArray(window.cachedClearancesList) ? window.cachedClearancesList : [];
-    if (isMasterOrExecNow()) return all;
-
-    const myId = String(window.currentUser?.id || '').trim();
-    const myEmail = String(window.currentUser?.email || '').toLowerCase().trim();
-    const myName = normText(window.currentUser?.name || '');
-
-    return all.filter(s => {
-      if (!s) return false;
-      const lId = String(s.teamLeaderId || '').trim();
-      const lEm = String(s.teamLeaderEmail || '').toLowerCase().trim();
-      const lNm = normText(s.teamLeader || '');
-      if (myId && lId && myId === lId) return true;
-      if (myEmail && lEm && myEmail === lEm) return true;
-      if (myName && lNm && (lNm === myName || lNm.includes(myName) || myName.includes(lNm))) return true;
-      return false;
-    });
-  }
-
-  function formatDisplayCodeNow(s) {
-    if (!s) return 'SYS-0000';
-    const raw = String(s.sheetNumber || '').trim();
-    if (/^SYS-\d+$/i.test(raw)) return raw.toUpperCase();
-    if (raw.toUpperCase().startsWith('SYS-')) {
-      const last = raw.split('-').pop();
-      if (/^\d+$/.test(last)) return `SYS-${last}`;
-    }
-    return `SYS-${String(s.createdAt || Date.now()).slice(-6)}`;
-  }
-
-  function formatFullNameNow(s) {
-    if (!s) return '-';
-    if (s.clearanceName && String(s.clearanceName).trim()) return String(s.clearanceName).trim();
-    return `${s.siteName || 'Site'} - ${formatDisplayCodeNow(s)}`;
-  }
-
-  function calcDaysNow(s) {
-    const parseD = str => {
-      if (!str) return null;
-      const c = String(str).trim();
-      const m1 = c.match(/^(\d{1,2})[\/\-\.](\d{1,2})[\/\-\.](\d{4})/);
-      if (m1) return new Date(+m1[3], +m1[2] - 1, +m1[1]);
-      const m2 = c.match(/^(\d{4})[\/\-\.](\d{1,2})[\/\-\.](\d{1,2})/);
-      if (m2) return new Date(+m2[1], +m2[2] - 1, +m2[3]);
-      return null;
-    };
-    const d1 = parseD(s?.startDate);
-    const d2 = parseD(s?.endDate);
-    if (d1 && d2 && !isNaN(d1) && !isNaN(d2)) {
-      const diff = Math.round((d2 - d1) / 86400000) + 1;
-      if (diff >= 1 && diff <= 90) return diff;
-    }
-    return 1;
-  }
-
-  function stageHtmlNow(s) {
-    const st = String(s.status || '').toUpperCase().trim();
-    if (st === 'REJECTED' || s.isRejected) {
-      const rsn = s.cancelReason || s.rejectionReason || s.technicalReturnReason || 'مراجعة البيانات';
-      return `<span class="px-2.5 py-0.5 rounded-full text-[10px] font-black bg-rose-950 text-rose-300 border border-rose-700">مرجعة للتعديل</span><div class="text-[10px] text-amber-300 mt-0.5">${esc(rsn)}</div>`;
-    }
-    if (s.deliveredToAccounts || s.hrConfirmed) {
-      return `<span class="px-2.5 py-1 rounded-full text-[10.5px] font-black bg-emerald-950 text-emerald-300 border border-emerald-600">مؤرشفة ومُسلّمة للحسابات</span>`;
-    }
-    if (s.cooApproved) {
-      return `<span class="px-2.5 py-1 rounded-full text-[10.5px] font-black bg-blue-950 text-blue-300 border border-blue-600">بانتظار الصرف المالي (HR)</span>`;
-    }
-    if (s.technicalApproved) {
-      return `<span class="px-2.5 py-1 rounded-full text-[10.5px] font-black bg-indigo-950 text-indigo-300 border border-indigo-600">بانتظار اعتماد COO</span>`;
-    }
-    if (st === 'APPROVED' || s.isApproved || s.signatureData) {
-      return `<span class="px-2.5 py-1 rounded-full text-[10.5px] font-black bg-sky-950 text-sky-300 border border-sky-600">بانتظار الإدارة الفنية</span>`;
-    }
-    return `<span class="px-2.5 py-1 rounded-full text-[10.5px] font-black bg-amber-950 text-amber-300 border border-amber-600">بانتظار التيم ليدر (${esc(s.teamLeader || '-')})</span>`;
-  }
-
-  window.renderLeaderDashboard = function() {
-    const searchQ = (document.getElementById('filterSearch')?.value || '').toLowerCase().trim();
-    const stF = (document.getElementById('filterStatus')?.value || 'ALL').toUpperCase();
-    const deptF = document.getElementById('filterDepartment')?.value || 'ALL';
-    const engF = (document.getElementById('filterEngineer')?.value || 'ALL').toLowerCase().trim();
-    const fromV = document.getElementById('leaderDateFrom')?.value || '';
-    const toV = document.getElementById('leaderDateTo')?.value || '';
-
-    const baseList = getVisibleLeaderSheetsNow();
-
-    const filtered = baseList.filter(s => {
-      if (fromV || toV) {
-        const raw = String(s.startDate || '').trim();
-        let ms = s.createdAt || 0;
-        const m1 = raw.match(/^(\d{1,2})[\/\-\.](\d{1,2})[\/\-\.](\d{4})/);
-        if (m1) ms = new Date(+m1[3], +m1[2] - 1, +m1[1]).getTime();
-        if (fromV && ms < new Date(fromV + 'T00:00:00').getTime()) return false;
-        if (toV && ms > new Date(toV + 'T23:59:59').getTime()) return false;
-      }
-      const st = String(s.status || 'PENDING').toUpperCase();
-      if (stF !== 'ALL' && st !== stF) return false;
-      if (deptF !== 'ALL' && s.department !== deptF) return false;
-      if (engF !== 'all') {
-        const sub = String(s.submittedByEngineer || '').toLowerCase().trim();
-        const mem = String(s.teamMembers || '').toLowerCase();
-        if (sub !== engF && !mem.includes(engF)) return false;
-      }
-      if (searchQ) {
-        const hay = `${formatFullNameNow(s)} ${s.siteName || ''} ${s.region || ''} ${s.department || ''} ${s.submittedByEngineer || ''} ${s.teamLeader || ''}`.toLowerCase();
-        if (!hay.includes(searchQ)) return false;
-      }
-      return true;
-    });
-
-    let tAdv = 0, tExp = 0, pend = 0;
-    filtered.forEach(s => {
-      tAdv += parseFloat(s.advanceAmount) || 0;
-      tExp += (s.items || []).reduce((a, b) => a + (parseFloat(b.amount) || 0), 0);
-      if (String(s.status || 'PENDING').toUpperCase() === 'PENDING') pend++;
-    });
-    const net = tAdv - tExp;
-
-    const setT = (id, v) => { const el = document.getElementById(id); if (el) el.innerText = v; };
-    setT('statTotalAdvance', tAdv.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
-    setT('statTotalExpenses', tExp.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
-    setT('statNetBalance', Math.abs(net).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
-    setT('statPendingCount', pend);
-    setT('badgePendingCount', pend);
-    setT('tableCountBadge', `${filtered.length} استمارة`);
-
-    const usersCount = (window.cachedUsersList || []).filter(u => !u.isSystemConfigDoc).length;
-    if (usersCount > 0) setT('statEngineersCount', usersCount);
-
-    const tbody = document.getElementById('leaderTableBody');
-    const emptyEl = document.getElementById('tableEmptyState');
-    if (tbody && emptyEl) {
-      if (filtered.length === 0) {
-        tbody.innerHTML = '';
-        emptyEl.classList.remove('hidden');
-      } else {
-        emptyEl.classList.add('hidden');
-        tbody.innerHTML = filtered.map(s => {
-          const exp = (s.items || []).reduce((a, b) => a + (parseFloat(b.amount) || 0), 0);
-          const adv = parseFloat(s.advanceAmount) || 0;
-          const bal = adv - exp;
-          const fullTitle = formatFullNameNow(s);
-          const codeOnly = formatDisplayCodeNow(s);
-          const days = calcDaysNow(s);
-
-          return `
-            <tr class="hover:bg-slate-800/40 transition">
-              <td class="py-3 px-4">
-                <div class="font-bold text-white font-mono">${esc(fullTitle)}</div>
-                <div class="text-[10px] text-sky-400 font-mono">كود: ${esc(codeOnly)} • ${esc(s.region || '-')}</div>
-              </td>
-              <td class="py-3 px-4 text-sky-300 font-bold">
-                ${esc(s.department || '-')}
-                <div class="text-[10px] text-slate-400 font-normal">${esc(s.activityType || '-')} (${days} يوم)</div>
-              </td>
-              <td class="py-3 px-4">
-                <div class="font-bold text-white">${esc(s.submittedByEngineer || '-')}</div>
-                <div class="text-[10px] text-amber-300 font-bold">ليدر: ${esc(s.teamLeader || '-')}</div>
-              </td>
-              <td class="py-3 px-4 font-bold text-white font-mono">${adv.toLocaleString()} ج.م</td>
-              <td class="py-3 px-4 font-bold text-sky-400 font-mono">${exp.toLocaleString()} ج.م</td>
-              <td class="py-3 px-4 font-bold font-mono ${bal >= 0 ? 'text-emerald-400' : 'text-rose-400'}">${bal.toLocaleString()} ج.م</td>
-              <td class="py-3 px-4">${stageHtmlNow(s)}</td>
-              <td class="py-3 px-4 text-center">
-                <div class="flex items-center justify-center gap-1.5 flex-wrap">
-                  <button type="button" onclick="openClearanceReview('${s.id}', false)" class="sys-btn-sm bg-sky-600 hover:bg-sky-500 text-white">فحص</button>
-                  <button type="button" onclick="cancelClearanceSheet('${s.id}')" class="sys-btn-sm bg-amber-600 hover:bg-amber-500 text-white">إرجاع</button>
-                  ${isMasterOrExecNow() ? `<button type="button" onclick="deleteClearanceSheet('${s.id}')" class="sys-btn-sm bg-rose-700 hover:bg-rose-600 text-white">حذف</button>` : ''}
-                </div>
-              </td>
-            </tr>
-          `;
-        }).join('');
-      }
-    }
-
-    if (typeof window.renderDynamicDashboardChart === 'function') {
-      try { window.renderDynamicDashboardChart(); } catch (e) {}
-    }
-  };
-
-  // =========================================================================
-  // 2. تشغيل Manpower بأثر رجعي + تفاصيل المصاريف + الفنيين + السواقين
+  // 6. Manpower بأثر رجعي (بدون مستمع Firebase مكرر)
   // =========================================================================
   window.mpRawData = window.mpRawData || [];
   window.mpEvaluatedExtraGroups = window.mpEvaluatedExtraGroups || [];
@@ -6747,19 +6628,10 @@
   let mpAscState = true;
   let mpChartInst = null;
 
-  function isUpMp(s) {
-    if (s?.sectorZone === 'UP') return true;
-    if (s?.sectorZone === 'DE') return false;
-    const t = `${s?.siteName || ''} ${s?.region || ''}`.toUpperCase();
-    return ['UP', 'صعيد', 'أسيوط', 'اسيوط', 'سوهاج', 'المنيا', 'منيا', 'قنا', 'أسوان', 'اسوان', 'الأقصر', 'الاقصر', 'بني سويف', 'الفيوم'].some(k => t.includes(k));
-  }
-
   function extractTechAndDriver(s) {
     const rawMembers = Array.isArray(s.teamMembers) ? s.teamMembers.join(' ') : String(s.teamMembers || '');
     const tokens = rawMembers.split(/\s*[_–—\-/،,|]+\s*|[,،|]+/).map(x => x.trim()).filter(Boolean);
-    const techs = [];
-    const drivers = [];
-
+    const techs = [], drivers = [];
     tokens.forEach(tok => {
       const low = tok.toLowerCase();
       if (low.includes('سائق') || low.includes('سواق') || low.includes('driver')) {
@@ -6769,7 +6641,6 @@
         if (clean.length >= 2) techs.push(clean);
       }
     });
-
     (s.items || []).forEach(it => {
       const cat = String(it.category || '').trim();
       const desc = String(it.description || '').trim();
@@ -6777,11 +6648,7 @@
         if (!drivers.some(d => d.includes(desc))) drivers.push(desc);
       }
     });
-
-    return {
-      technicians: techs.join(' ، ') || rawMembers || '-',
-      drivers: drivers.join(' ، ') || '-'
-    };
+    return { technicians: techs.join(' ، ') || rawMembers || '-', drivers: drivers.join(' ، ') || '-' };
   }
 
   function buildExpenseDetailsText(s) {
@@ -6795,20 +6662,15 @@
     }).filter(Boolean).join(' | ') || '-';
   }
 
-  function rebuildManpowerRecordsRetroactive() {
+  function rebuildManpowerRecords() {
     const sheets = Array.isArray(window.cachedClearancesList) ? window.cachedClearancesList : [];
     const excelOnly = (Array.isArray(window.mpRawData) ? window.mpRawData : []).filter(x => !x._fromClearance);
-
     const synced = sheets.map(s => {
       const td = extractTechAndDriver(s);
-      const expDetails = buildExpenseDetailsText(s);
       const adv = parseFloat(s.advanceAmount) || 0;
       const exp = (s.items || []).reduce((a, b) => a + (parseFloat(b.amount) || 0), 0);
-      const net = adv - exp;
-
       const rawDate = String(s.startDate || '').trim();
-      let dateStr = rawDate || '-';
-      let monthStr = 'أخرى';
+      let dateStr = rawDate || '-', monthStr = 'أخرى';
       const m1 = rawDate.match(/^(\d{1,2})[\/\-\.](\d{1,2})[\/\-\.](\d{4})/);
       if (m1) {
         dateStr = `${m1[3]}-${String(m1[2]).padStart(2, '0')}-${String(m1[1]).padStart(2, '0')}`;
@@ -6819,36 +6681,23 @@
         dateStr = dObj.toISOString().slice(0, 10);
         monthStr = dObj.toLocaleString('en-US', { month: 'short', year: 'numeric' });
       }
-
       const site = String(s.siteName || '-').trim();
       return {
-        _fromClearance: true,
-        sheetId: s.id,
-        sheetCode: formatDisplayCodeNow(s),
-        date: dateStr,
-        month: monthStr,
-        site,
-        code: site,
-        region: isUpMp(s) ? 'UP' : 'DE',
-        department: s.department || '-',
-        engineer: s.submittedByEngineer || '-',
-        teamLeader: s.teamLeader || '-',
-        technicians: td.technicians,
-        drivers: td.drivers,
-        expenseDetails: expDetails,
-        advance: adv,
-        expenses: exp,
-        netBalance: net,
-        stream: s.activityType || '2600_TDD',
-        action: s.activityType || '-'
+        _fromClearance: true, sheetId: s.id, sheetCode: fmtCode(s),
+        date: dateStr, month: monthStr, site, code: site,
+        region: isUpZone(s) ? 'UP' : 'DE', department: s.department || '-',
+        engineer: s.submittedByEngineer || '-', teamLeader: s.teamLeader || '-',
+        technicians: td.technicians, drivers: td.drivers,
+        expenseDetails: buildExpenseDetailsText(s),
+        advance: adv, expenses: exp, netBalance: adv - exp,
+        stream: s.activityType || '2600_TDD', action: s.activityType || '-'
       };
     });
-
     window.mpRawData = [...synced, ...excelOnly];
   }
 
   window.populateMpDropdowns = function() {
-    rebuildManpowerRecordsRetroactive();
+    rebuildManpowerRecords();
     const months = [...new Set(window.mpRawData.map(x => x.month).filter(Boolean))];
     const mSel = document.getElementById('mpFilterMonth');
     if (mSel) {
@@ -6882,7 +6731,7 @@
   };
 
   window.applyManpowerFilters = function() {
-    rebuildManpowerRecordsRetroactive();
+    rebuildManpowerRecords();
     const mF = document.getElementById('mpFilterMonth')?.value || 'ALL';
     const sF = document.getElementById('mpFilterStream')?.value || 'ALL';
     const q = (document.getElementById('mpFilterSearch')?.value || '').toLowerCase().trim();
@@ -6891,26 +6740,17 @@
       if (mpRegionState !== 'ALL' && d.region !== mpRegionState) return false;
       if (mF !== 'ALL' && d.month !== mF) return false;
       if (sF !== 'ALL' && d.stream !== sF) return false;
-      if (q) {
-        const hay = `${d.engineer || ''} ${d.teamLeader || ''} ${d.technicians || ''} ${d.drivers || ''} ${d.site || ''} ${d.sheetCode || ''} ${d.expenseDetails || ''} ${d.stream || ''}`.toLowerCase();
-        if (!hay.includes(q)) return false;
-      }
+      if (q && !`${d.engineer || ''} ${d.teamLeader || ''} ${d.technicians || ''} ${d.drivers || ''} ${d.site || ''} ${d.sheetCode || ''} ${d.expenseDetails || ''} ${d.stream || ''}`.toLowerCase().includes(q)) return false;
       return true;
     });
 
-    // حساب Extra Visits لكل موقع + Stream
     const groupsMap = {};
     [...filtered].sort((a, b) => String(a.date || '').localeCompare(String(b.date || ''))).forEach(d => {
       const k = `${String(d.code || d.site || 'UNK').toUpperCase().trim()}__${String(d.stream || '2600_TDD').trim().toLowerCase()}`;
       const limit = typeof window.getAllowedVisitsForStream === 'function' ? window.getAllowedVisitsForStream(d.stream) : 1;
-      if (!groupsMap[k]) {
-        groupsMap[k] = { key: k, siteCode: d.code || d.site || '-', region: d.region || 'DE', stream: d.stream || '2600_TDD', allowedLimit: limit, totalVisits: 0, extraVisits: 0, engineers: new Set(), dates: [] };
-      }
+      if (!groupsMap[k]) groupsMap[k] = { key: k, siteCode: d.code || d.site || '-', region: d.region || 'DE', stream: d.stream || '2600_TDD', allowedLimit: limit, totalVisits: 0, extraVisits: 0, engineers: new Set(), dates: [] };
       const g = groupsMap[k];
-      g.totalVisits++;
-      d._visitOrder = g.totalVisits;
-      d._allowed = limit;
-      d._isExtra = g.totalVisits > limit;
+      g.totalVisits++; d._visitOrder = g.totalVisits; d._allowed = limit; d._isExtra = g.totalVisits > limit;
       if (d._isExtra) g.extraVisits++;
       if (d.engineer) g.engineers.add(d.engineer);
       if (d.date && d.date !== '-') g.dates.push(d.date);
@@ -6928,14 +6768,12 @@
     setT('mpKpiExtraSitesSub', `في ${exceeded.length} موقع`);
     setT('mpChartScopeBadge', `${filtered.length} أكشن • ${extraSum} Extra`);
 
-    const engMap = {}; const stSet = new Set(); const stCnt = {};
+    const engMap = {}, stSet = new Set(), stCnt = {};
     filtered.forEach(d => {
-      const e = d.engineer || 'غير محدد';
-      const st = d.stream || '2600_TDD';
+      const e = d.engineer || 'غير محدد', st = d.stream || '2600_TDD';
       stSet.add(st); stCnt[st] = (stCnt[st] || 0) + 1;
       if (!engMap[e]) engMap[e] = { name: e, total: 0, UP: 0, DE: 0, extra: 0, streams: {} };
-      engMap[e].total++;
-      engMap[e][d.region] = (engMap[e][d.region] || 0) + 1;
+      engMap[e].total++; engMap[e][d.region] = (engMap[e][d.region] || 0) + 1;
       if (d._isExtra) engMap[e].extra++;
       engMap[e].streams[st] = (engMap[e].streams[st] || 0) + 1;
     });
@@ -6943,20 +6781,17 @@
     const engArr = Object.values(engMap);
     setT('mpKpiTotalEngineers', engArr.length);
     engArr.sort((a, b) => mpAscState ? a.total - b.total : b.total - a.total);
-
     const topE = [...engArr].sort((a, b) => b.total - a.total)[0];
     setT('mpKpiTopEngineer', topE ? `${topE.name} (${topE.total})` : '--');
     const topS = Object.entries(stCnt).sort((a, b) => b[1] - a[1])[0];
     setT('mpKpiTopStream', topS ? `${topS[0]} (${topS[1]})` : '--');
 
-    // رسم الشارت بأمان
     const canvas = document.getElementById('manpowerMainChart');
     if (canvas && typeof Chart !== 'undefined') {
       try { const prev = Chart.getChart(canvas); if (prev) prev.destroy(); } catch (e) {}
       if (mpChartInst) { try { mpChartInst.destroy(); } catch (e) {} }
       const palette = ['#10b981', '#0ea5e9', '#8b5cf6', '#f59e0b', '#ec4899', '#14b8a6', '#f97316', '#6366f1'];
-      const cEngs = engArr.slice(0, 35);
-      const cSts = [...stSet].slice(0, 14);
+      const cEngs = engArr.slice(0, 35), cSts = [...stSet].slice(0, 14);
       mpChartInst = new Chart(canvas.getContext('2d'), {
         type: 'bar',
         data: {
@@ -6971,7 +6806,6 @@
       });
     }
 
-    // جدول Extra Visits
     const exBody = document.getElementById('mpExtraVisitsTableBody');
     setT('mpExtraTableCountBadge', `${exceeded.length} موقع متجاوز (+${extraSum})`);
     if (exBody) {
@@ -6989,9 +6823,7 @@
           </tr>`).join('');
     }
 
-    // جدول التصفيات والـ Manpower الشامل (فنيون، سائقون، تفاصيل المصاريف، عهدة، منصرف، صافي)
-    const mpSection = document.getElementById('viewManpower');
-    const mpTable = mpSection?.querySelectorAll('table')[1];
+    const mpTable = document.getElementById('viewManpower')?.querySelectorAll('table')[1];
     if (mpTable) {
       const theadRow = mpTable.querySelector('thead tr');
       if (theadRow) {
@@ -7014,20 +6846,12 @@
         mpBody.innerHTML = filtered.length === 0
           ? `<tr><td colspan="10" class="py-8 text-center text-slate-500 font-bold">لا توجد بيانات مطابقة.</td></tr>`
           : filtered.slice(0, 250).map((d, idx) => {
-              const adv = parseFloat(d.advance || 0);
-              const exp = parseFloat(d.expenses || 0);
-              const net = adv - exp;
+              const adv = parseFloat(d.advance || 0), exp = parseFloat(d.expenses || 0), net = adv - exp;
               return `
                 <tr class="hover:bg-slate-800/40 ${d._isExtra ? 'bg-rose-950/15' : ''}">
                   <td class="py-2.5 px-3 text-center font-mono text-slate-400">${idx + 1}</td>
-                  <td class="py-2.5 px-3 font-mono font-bold text-white">
-                    ${esc(d.site || '-')}
-                    <div class="text-[10px] text-sky-400">${esc(d.sheetCode || '-')} • ${esc(d.date || '-')}</div>
-                  </td>
-                  <td class="py-2.5 px-3">
-                    <div class="font-bold text-white">${esc(d.engineer || '-')}</div>
-                    <div class="text-[10px] text-amber-300">ليدر: ${esc(d.teamLeader || '-')}</div>
-                  </td>
+                  <td class="py-2.5 px-3 font-mono font-bold text-white">${esc(d.site || '-')}<div class="text-[10px] text-sky-400">${esc(d.sheetCode || '-')} • ${esc(d.date || '-')}</div></td>
+                  <td class="py-2.5 px-3"><div class="font-bold text-white">${esc(d.engineer || '-')}</div><div class="text-[10px] text-amber-300">ليدر: ${esc(d.teamLeader || '-')}</div></td>
                   <td class="py-2.5 px-3 text-cyan-300 font-bold max-w-[180px] whitespace-normal">${esc(d.technicians || '-')}</td>
                   <td class="py-2.5 px-3 text-emerald-300 font-bold max-w-[150px] whitespace-normal">${esc(d.drivers || '-')}</td>
                   <td class="py-2.5 px-3 text-center font-mono font-bold text-sky-400">${d.region === 'UP' ? 1 : 0}</td>
@@ -7046,147 +6870,94 @@
     }
   };
 
-  // تحديث فوري عند وصول أي تصفية أو فتح تبويب Manpower / الإدارة والاعتماد
-  if (typeof db !== 'undefined') {
-    db.collection("clearance_sheets").onSnapshot(() => {
-      setTimeout(() => {
-        rebuildManpowerRecordsRetroactive();
-        if (window.currentUser?.activeViewMode === 'leader') window.renderLeaderDashboard();
-        if (window.currentUser?.activeViewMode === 'manpower') window.applyManpowerFilters();
-      }, 200);
+  window.exportManpowerDataToExcel = function() {
+    rebuildManpowerRecords();
+    if (typeof ExcelJS === 'undefined') return alert('مكتبة Excel غير محملة.');
+    const rows = [[
+      '#', 'الكود', 'الموقع', 'المنطقة', 'القسم', 'التاريخ', 'الشهر',
+      'المهندس', 'التيم ليدر', 'الفنيون', 'السائقون', 'النشاط / Stream',
+      'تفاصيل المصاريف', 'العهدة (ج.م)', 'المنصرف (ج.م)', 'الصافي (ج.م)'
+    ]];
+    window.mpRawData.forEach((d, idx) => {
+      rows.push([
+        idx + 1, d.sheetCode || '-', d.site || '-', d.region || '-', d.department || '-',
+        d.date || '-', d.month || '-', d.engineer || '-', d.teamLeader || '-',
+        d.technicians || '-', d.drivers || '-', d.stream || '-',
+        d.expenseDetails || '-', parseFloat(d.advance || 0), parseFloat(d.expenses || 0), parseFloat(d.netBalance || 0)
+      ]);
+    });
+    const wb = new ExcelJS.Workbook();
+    const ws = wb.addWorksheet('Manpower Full', { views: [{ rightToLeft: true, showGridLines: true }] });
+    ws.addRow(rows[0]);
+    rows.slice(1).forEach(r => ws.addRow(r));
+    ws.columns.forEach(c => { c.width = 22; });
+    wb.xlsx.writeBuffer().then(buf => {
+      saveAs(new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }), `SYSCON_Manpower_Details_${new Date().toLocaleDateString('en-GB').replace(/\//g, '-')}.xlsx`);
+    });
+  };
+
+  // ربط التحديث بمستمع Firebase الوحيد بدون تكرار
+  window.onClearancesUpdatedHook = function() {
+    rebuildManpowerRecords();
+  };
+
+  // =========================================================================
+  // 7. أزرار الرجوع وزر Escape (باستخدام MutationObserver خفيف بدل setInterval)
+  // =========================================================================
+  const dynamicModalIds = [
+    'siteBomModal', 'mpEngineerDetailsModal', 'mpSheetPickerModal', 'mpAddModal',
+    'engineerWalletModal', 'cashAdvanceLedgerModal', 'masterPermissionsModal',
+    'changePasswordSelfModal', 'receiptPreviewModal'
+  ];
+
+  function ensureBackButtons() {
+    const fullRepCard = document.querySelector('#fullReportModal > div');
+    if (fullRepCard && !document.getElementById('fullReportBottomBackBar')) {
+      const bar = document.createElement('div');
+      bar.id = 'fullReportBottomBackBar';
+      bar.className = 'bg-slate-950 px-4 md:px-6 py-3.5 border-t border-slate-800 flex items-center justify-between gap-2 no-print shrink-0';
+      bar.innerHTML = `
+        <button type="button" onclick="closeFullSystemReportModal()" class="sys-btn bg-slate-800 hover:bg-slate-700 text-sky-300 border border-slate-700">
+          <i data-lucide="arrow-right" class="lucide-inline"></i><span>رجوع إلى اللوحة</span>
+        </button>
+        <button type="button" onclick="closeFullSystemReportModal()" class="sys-btn-sm bg-slate-900 hover:bg-slate-800 text-slate-400 hover:text-white">إغلاق</button>
+      `;
+      fullRepCard.appendChild(bar);
+      if (window.lucide) window.lucide.createIcons();
+    }
+    dynamicModalIds.forEach(id => {
+      const modal = document.getElementById(id);
+      const card = modal?.querySelector(':scope > div');
+      if (!card || card.querySelector('.sys-auto-back-footer')) return;
+      const footer = document.createElement('div');
+      footer.className = 'sys-auto-back-footer pt-3 border-t border-slate-800 flex items-center justify-end gap-2 no-print';
+      footer.innerHTML = `<button type="button" onclick="document.getElementById('${id}')?.remove()" class="sys-btn-sm bg-slate-800 hover:bg-slate-700 text-sky-300 border border-slate-700"><i data-lucide="arrow-right" class="lucide-inline"></i><span>رجوع</span></button>`;
+      card.appendChild(footer);
+      if (window.lucide) window.lucide.createIcons();
     });
   }
 
-  setTimeout(() => {
-    rebuildManpowerRecordsRetroactive();
-    if (window.currentUser?.activeViewMode === 'leader') window.renderLeaderDashboard();
-    if (window.currentUser?.activeViewMode === 'manpower') window.applyManpowerFilters();
-  }, 450);
+  new MutationObserver(ensureBackButtons).observe(document.body, { childList: true });
+  ensureBackButtons();
 
-})();
-</script>
-<script>
-(function sysconCleanFastBoot() {
-  // 1. منع أي طرد تلقائي بسبب تأخر تحميل قائمة المستخدمين
-  const _origLogout = window.handleLogout;
-  window.handleLogout = function(isManualClick) {
-    // لا تنفذ الخروج إلا إذا ضغط المستخدم بنفسه على زر "خروج"
-    if (isManualClick !== true && window.currentUser && window.currentUser.id) {
-      return;
+  window.addEventListener('keydown', function(e) {
+    if (e.key !== 'Escape') return;
+    const checks = [
+      ['fullReportModal', 'closeFullSystemReportModal'],
+      ['clearanceModal', 'closeClearanceModal'],
+      ['notificationsModal', 'closeNotificationsModal'],
+      ['engineersModal', 'closeEngineersDirectoryModal'],
+      ['auditLogsModal', 'closeAuditLogsModal']
+    ];
+    for (const [id, fn] of checks) {
+      const el = document.getElementById(id);
+      if (el && !el.classList.contains('hidden') && typeof window[fn] === 'function') {
+        window[fn]();
+        return;
+      }
     }
-    if (typeof _origLogout === 'function') return _origLogout.apply(this, arguments);
-  };
-
-  // ربط زر الخروج في الهيدر بالخروج اليدوي الصريح
-  document.querySelectorAll('button[onclick*="handleLogout"]').forEach(btn => {
-    btn.setAttribute('onclick', 'handleLogout(true)');
   });
 
-  // 2. توحيد رقم الموبايل في البحث عند تسجيل الدخول
-  function cleanPh(p) {
-    let d = String(p || '').replace(/[٠-٩]/g, c => '٠١٢٣٤٥٦٧٨٩'.indexOf(c)).replace(/\D/g, '');
-    if (d.startsWith('0020')) d = d.slice(4);
-    else if (d.startsWith('20') && d.length === 12) d = d.slice(2);
-    if (d.startsWith('0')) d = d.slice(1);
-    return d;
-  }
-
-  async function hashPwd(plain) {
-    const buf = new TextEncoder().encode(String(plain).trim());
-    const hBuf = await crypto.subtle.digest('SHA-256', buf);
-    return 'sha256$' + Array.from(new Uint8Array(hBuf)).map(b => b.toString(16).padStart(2, '0')).join('');
-  }
-
-  window.handleLoginSubmit = async function() {
-    const ident = (document.getElementById('loginUsername')?.value || '').trim();
-    const pwd = (document.getElementById('loginPassword')?.value || '').trim();
-    if (!ident || !pwd) return alert('يرجى إدخال بيانات الحساب وكلمة المرور.');
-
-    const btn = document.querySelector('#formLogin button[onclick*="handleLoginSubmit"]');
-    if (btn) { btn.disabled = true; btn.style.opacity = '0.6'; }
-
-    try {
-      const [snap, hPwd] = await Promise.all([
-        db.collection("user_accounts").get(),
-        hashPwd(pwd)
-      ]);
-
-      const key = ident.toLowerCase();
-      const keyPh = cleanPh(ident);
-      let matched = null;
-
-      snap.forEach(doc => {
-        if (matched) return;
-        const u = doc.data();
-        if (!u || u.isSystemConfigDoc) return;
-        const em = String(u.email || '').toLowerCase().trim();
-        const nm = String(u.name || u.fullName || '').toLowerCase().trim();
-        const p1 = cleanPh(u.phone || '');
-        const p2 = cleanPh(u.mobile || '');
-
-        if ((em && em === key) || (nm && nm === key) || (keyPh.length >= 9 && (p1 === keyPh || p2 === keyPh))) {
-          matched = { id: doc.id, ...u };
-        }
-      });
-
-      if (!matched) return alert('هذا الحساب غير مسجل بالنظام.');
-
-      const savedPass = String(matched.password || matched.pass || '').trim();
-      if (savedPass && savedPass !== hPwd && savedPass !== pwd) {
-        return alert('كلمة المرور غير صحيحة.');
-      }
-
-      const em = String(matched.email || '').toLowerCase().trim();
-      const isExec = [
-        'yasser.awad.systel@gmail.com', 'yasser.awad.systel@gmail.co',
-        'mohamed.mounir@systel.com.eg', 'nasser.baset@systel.com.eg', 'mohamed.samih@systel.com.eg'
-      ].includes(em);
-
-      if (!isExec && matched.isApproved !== true) {
-        return alert('الحساب بانتظار موافقة الإدارة.');
-      }
-
-      const rStr = String(matched.role || '').toLowerCase();
-      const tStr = String(matched.jobTitle || '').toLowerCase();
-      const actualRole = isExec ? 'leader'
-        : ((rStr === 'hr' || tStr.includes('hr') || tStr.includes('مالية')) ? 'hr'
-        : ((rStr === 'technical' || tStr.includes('فنية')) ? 'technical'
-        : (rStr === 'leader' ? 'leader' : 'engineer')));
-
-      const selectedBtn = window.currentUser?.loginSelectedRole || actualRole;
-      let initView = 'engineer';
-      if (isExec) initView = (selectedBtn === 'hr' ? 'hr' : (selectedBtn === 'technical' ? 'technical' : 'leader'));
-      else if (actualRole === 'hr') initView = 'hr';
-      else if (actualRole === 'technical') initView = 'technical';
-      else if (actualRole === 'leader') initView = 'leader';
-
-      window.currentUser = {
-        id: matched.id,
-        name: matched.name || matched.fullName || ident,
-        email: em,
-        phone: matched.phone || matched.mobile || '',
-        role: actualRole === 'hr' ? 'leader' : actualRole,
-        loginSelectedRole: selectedBtn,
-        jobTitle: matched.jobTitle || (isExec ? 'مدير النظام' : 'تيم ليدر'),
-        isApproved: true,
-        activeViewMode: initView,
-        permissions: matched.permissions || {}
-      };
-
-      localStorage.setItem('systel_active_user_session_v3', JSON.stringify(window.currentUser));
-
-      document.getElementById('headerUserName').textContent = window.currentUser.name;
-      document.getElementById('headerUserRole').textContent = window.currentUser.jobTitle;
-      document.getElementById('loginOverlay').classList.add('hidden');
-      document.getElementById('loginOverlay').style.display = 'none';
-
-      if (typeof window.setAppMode === 'function') window.setAppMode(initView);
-    } catch (e) {
-      alert('خطأ: ' + e.message);
-    } finally {
-      if (btn) { btn.disabled = false; btn.style.opacity = '1'; }
-    }
-  };
 })();
 </script>
 </body>
