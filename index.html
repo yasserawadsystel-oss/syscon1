@@ -4870,14 +4870,25 @@
         const master = isMasterAdmin(em);
         const pend = !isUserApproved(e);
         const online = isUserOnline(e);
-        const rKey = master ? 'admin' : (isHrRole(e.role, e.jobTitle) ? 'hr' : (isTechRole(e.role, e.jobTitle) ? 'technical' : (String(e.role || '').toLowerCase() === 'leader' ? 'leader' : 'engineer')));
+        const rLow = String(e.role || '').toLowerCase().trim();
+        const tUp = String(e.jobTitle || '').toUpperCase().trim();
+        const rKey = master ? 'admin'
+          : ((rLow === 'ceo' || tUp === 'CEO' || em === 'nasser.baset@systel.com.eg') ? 'ceo'
+          : ((rLow === 'coo' || tUp === 'COO' || em === 'mohamed.mounir@systel.com.eg') ? 'coo'
+          : ((rLow === 'cto' || tUp === 'CTO' || em === 'mohamed.samih@systel.com.eg') ? 'cto'
+          : (isHrRole(e.role, e.jobTitle) ? 'hr'
+          : (isTechRole(e.role, e.jobTitle) ? 'technical'
+          : (rLow === 'leader' ? 'leader' : 'engineer'))))));
 
         const roleCell = (canManage && !master)
           ? `<select onchange="changeUserRoleQuick('${e.id}', this.value)" class="sys-input px-2 py-1 text-[11px] font-bold text-sky-300">
-               <option value="engineer" ${rKey === 'engineer' ? 'selected' : ''}>مهندس موقع</option>
+               <option value="ceo" ${rKey === 'ceo' ? 'selected' : ''}>CEO</option>
+               <option value="coo" ${rKey === 'coo' ? 'selected' : ''}>COO</option>
+               <option value="cto" ${rKey === 'cto' ? 'selected' : ''}>CTO</option>
                <option value="leader" ${rKey === 'leader' ? 'selected' : ''}>تيم ليدر</option>
                <option value="technical" ${rKey === 'technical' ? 'selected' : ''}>الإدارة الفنية</option>
                <option value="hr" ${rKey === 'hr' ? 'selected' : ''}>المالية HR</option>
+               <option value="engineer" ${rKey === 'engineer' ? 'selected' : ''}>مهندس موقع</option>
              </select>`
           : `<span class="px-2 py-0.5 rounded bg-sky-950 text-sky-300 border border-sky-800 text-[11px] font-bold">${escapeHtml(getJobTitle(em, e.role, e.jobTitle))}</span>`;
 
@@ -4917,13 +4928,20 @@
 
     window.changeUserRoleQuick = async function(uid, rKey) {
       const map = {
-        engineer: { role: 'engineer', jobTitle: 'مهندس موقع' },
-        leader: { role: 'leader', jobTitle: 'تيم ليدر' },
-        technical: { role: 'technical', jobTitle: 'الإدارة الفنية' },
-        hr: { role: 'hr', jobTitle: 'المراجعة المالية HR' }
+        ceo: { role: 'ceo', jobTitle: 'CEO', tpl: 'ceo' },
+        coo: { role: 'coo', jobTitle: 'COO', tpl: 'coo' },
+        cto: { role: 'cto', jobTitle: 'CTO', tpl: 'ceo' },
+        engineer: { role: 'engineer', jobTitle: 'مهندس موقع', tpl: 'engineer' },
+        leader: { role: 'leader', jobTitle: 'تيم ليدر', tpl: 'leader' },
+        technical: { role: 'technical', jobTitle: 'الإدارة الفنية', tpl: 'technical' },
+        hr: { role: 'hr', jobTitle: 'المراجعة المالية HR', tpl: 'hr' }
       };
       const cfg = map[rKey] || map.engineer;
-      await db.collection("user_accounts").doc(uid).update({ role: cfg.role, jobTitle: cfg.jobTitle, permissions: getRoleTemplate(rKey) });
+      await db.collection("user_accounts").doc(uid).update({
+        role: cfg.role,
+        jobTitle: cfg.jobTitle,
+        permissions: getRoleTemplate(cfg.tpl)
+      });
       logAudit("تغيير وظيفة مستخدم", `إلى: ${cfg.jobTitle}`);
     };
 
