@@ -6978,5 +6978,187 @@
 
 })();
 </script>
+<style>
+  @media (max-width: 1023px) {
+    #clearanceModal {
+      align-items: flex-start !important;
+      padding: 6px !important;
+    }
+    #clearanceModal > div {
+      display: flex !important;
+      flex-direction: column !important;
+      max-height: 96dvh !important;
+      width: 100% !important;
+      margin: 0 auto !important;
+      border-radius: 14px !important;
+    }
+    #sheetScrollWrapper {
+      display: block !important;
+      flex: 1 1 auto !important;
+      overflow: auto !important;
+      -webkit-overflow-scrolling: touch !important;
+      padding: 8px !important;
+      text-align: center !important;
+    }
+    #leaderActionBox {
+      padding: 10px 12px !important;
+      gap: 8px !important;
+    }
+    #mobileSheetZoomBar {
+      display: flex !important;
+    }
+  }
+  #mobileSheetZoomBar {
+    display: none;
+  }
+  @media print {
+    #mobileSheetZoomBar { display: none !important; }
+    #mobileSheetScaleStage {
+      width: 100% !important;
+      height: auto !important;
+      overflow: visible !important;
+    }
+    #printableSheet {
+      transform: none !important;
+    }
+  }
+</style>
+
+<script>
+(function initMobileResponsiveClearanceView() {
+  "use strict";
+
+  let zoomMode = 'fit'; // 'fit' | 'custom'
+  let currentScale = 1;
+
+  function ensureMobileElements() {
+    const wrapper = document.getElementById('sheetScrollWrapper');
+    const sheet = document.getElementById('printableSheet');
+    if (!wrapper || !sheet) return null;
+
+    // 1. غلاف التحجيم الآمن للـ RTL
+    let stage = document.getElementById('mobileSheetScaleStage');
+    if (!stage) {
+      stage = document.createElement('div');
+      stage.id = 'mobileSheetScaleStage';
+      stage.setAttribute('dir', 'ltr');
+      stage.style.cssText = 'position:relative; margin:0 auto; overflow:hidden;';
+      wrapper.insertBefore(stage, sheet);
+      stage.appendChild(sheet);
+    }
+
+    // 2. شريط تحكم بسيط يظهر على الموبايل والتابلت فقط
+    let bar = document.getElementById('mobileSheetZoomBar');
+    if (!bar) {
+      bar = document.createElement('div');
+      bar.id = 'mobileSheetZoomBar';
+      bar.className = 'no-print bg-slate-800 text-slate-100 px-3 py-2 border-b border-slate-700 items-center justify-between gap-2 text-xs font-bold shrink-0';
+      bar.innerHTML = `
+        <div class="flex items-center gap-1.5">
+          <button type="button" id="btnMobFit" onclick="window.setMobileSheetZoom('fit')" class="px-2.5 py-1 rounded-lg bg-sky-500 text-slate-950 font-black cursor-pointer">ملء الشاشة</button>
+          <button type="button" id="btnMobFull" onclick="window.setMobileSheetZoom('full')" class="px-2.5 py-1 rounded-lg bg-slate-700 text-slate-200 cursor-pointer">تكبير 100%</button>
+        </div>
+        <div class="flex items-center gap-1.5">
+          <button type="button" onclick="window.stepMobileSheetZoom(-0.15)" class="w-7 h-7 rounded-lg bg-slate-700 text-white font-black cursor-pointer">−</button>
+          <span id="mobZoomPctLabel" class="font-mono text-[11px] text-sky-300 min-w-[38px] text-center">100%</span>
+          <button type="button" onclick="window.stepMobileSheetZoom(0.15)" class="w-7 h-7 rounded-lg bg-slate-700 text-white font-black cursor-pointer">+</button>
+        </div>
+      `;
+      wrapper.parentNode.insertBefore(bar, wrapper);
+    }
+
+    return { wrapper, sheet, stage };
+  }
+
+  function applyScale() {
+    const els = ensureMobileElements();
+    if (!els) return;
+    const { wrapper, sheet, stage } = els;
+    const modal = document.getElementById('clearanceModal');
+    if (!modal || modal.classList.contains('hidden')) return;
+
+    const SHEET_W = 980;
+    const isMobile = window.innerWidth < 1024;
+
+    if (!isMobile) {
+      sheet.style.transform = '';
+      sheet.style.transformOrigin = '';
+      sheet.style.margin = '0 auto';
+      stage.style.width = SHEET_W + 'px';
+      stage.style.height = 'auto';
+      return;
+    }
+
+    const availW = Math.max(260, wrapper.clientWidth - 16);
+    const fitScale = Math.min(1, availW / SHEET_W);
+    const scale = (zoomMode === 'fit') ? fitScale : Math.max(fitScale, Math.min(1.25, currentScale));
+    currentScale = scale;
+
+    sheet.style.margin = '0';
+    sheet.style.transformOrigin = 'top left';
+    sheet.style.transform = `scale(${scale})`;
+
+    const rawH = sheet.offsetHeight || 620;
+    stage.style.width = Math.round(SHEET_W * scale) + 'px';
+    stage.style.height = Math.ceil(rawH * scale) + 'px';
+
+    const pct = document.getElementById('mobZoomPctLabel');
+    if (pct) pct.textContent = Math.round(scale * 100) + '%';
+
+    const bFit = document.getElementById('btnMobFit');
+    const bFull = document.getElementById('btnMobFull');
+    if (bFit && bFull) {
+      const isFit = (zoomMode === 'fit');
+      bFit.className = isFit
+        ? 'px-2.5 py-1 rounded-lg bg-sky-500 text-slate-950 font-black cursor-pointer'
+        : 'px-2.5 py-1 rounded-lg bg-slate-700 text-slate-200 cursor-pointer';
+      bFull.className = !isFit
+        ? 'px-2.5 py-1 rounded-lg bg-sky-500 text-slate-950 font-black cursor-pointer'
+        : 'px-2.5 py-1 rounded-lg bg-slate-700 text-slate-200 cursor-pointer';
+    }
+  }
+
+  window.setMobileSheetZoom = function(mode) {
+    const wrapper = document.getElementById('sheetScrollWrapper');
+    if (mode === 'fit') {
+      zoomMode = 'fit';
+    } else {
+      zoomMode = 'custom';
+      currentScale = 1;
+    }
+    applyScale();
+    if (wrapper && mode === 'full') {
+      wrapper.scrollLeft = wrapper.scrollWidth;
+    }
+  };
+
+  window.stepMobileSheetZoom = function(delta) {
+    zoomMode = 'custom';
+    currentScale = Math.max(0.3, Math.min(1.25, currentScale + delta));
+    applyScale();
+  };
+
+  // إعادة الحساب تلقائياً عند فتح الاستمارة أو تدوير الموبايل أو إضافة سطر مصروف
+  const _origOpen = window.openClearanceReview;
+  if (typeof _origOpen === 'function') {
+    window.openClearanceReview = function() {
+      const res = _origOpen.apply(this, arguments);
+      zoomMode = 'fit';
+      requestAnimationFrame(() => setTimeout(applyScale, 60));
+      return res;
+    };
+  }
+
+  window.addEventListener('resize', applyScale);
+  window.addEventListener('orientationchange', () => setTimeout(applyScale, 150));
+
+  document.addEventListener('DOMContentLoaded', () => {
+    const els = ensureMobileElements();
+    if (els && typeof ResizeObserver !== 'undefined') {
+      new ResizeObserver(applyScale).observe(els.sheet);
+    }
+  });
+})();
+</script>
 </body>
 </html>
