@@ -7160,11 +7160,11 @@
   });
 })();
 </script>
-<style id="sysconAutoDetectPrintFix">
+<style id="sysconFinalOfficialSheetPrint">
 @media print {
   @page {
-    size: A4 landscape;
-    margin: 4mm;
+    size: auto;
+    margin: 5mm;
   }
 
   * {
@@ -7180,129 +7180,92 @@
     overflow: visible !important;
   }
 
-  /* إخفاء كل عناصر الصفحة ما عدا الحاوية التي تحتوي على التصفية المفتوحة فعلياً */
-  body > *:not(.syscon-print-root) {
+  /* إخفاء كل عناصر الصفحة لمنع التكرار (1 page فقط) */
+  body > * {
     display: none !important;
   }
 
-  /* كسر أي قاعدة قديمة كانت تخفي المحتوى */
-  .syscon-print-root,
-  .syscon-print-root *:not(.hidden):not(.syscon-hide-print) {
-    visibility: visible !important;
-  }
-
-  .syscon-print-root {
-    position: static !important;
-    inset: auto !important;
+  /* إظهار حاوية الطباعة المعزولة الوحيدة فقط */
+  body > #sysconOfficialPrintHost {
     display: block !important;
     width: 100% !important;
-    height: auto !important;
-    background: #ffffff !important;
-    padding: 0 !important;
-    margin: 0 !important;
-    overflow: visible !important;
-  }
-
-  .syscon-print-root > div {
-    position: static !important;
-    width: 100% !important;
     max-width: 100% !important;
-    max-height: none !important;
     margin: 0 !important;
     padding: 0 !important;
-    box-shadow: none !important;
-    border: none !important;
-    overflow: visible !important;
+    background: #ffffff !important;
   }
 
-  /* إخفاء كافة الأزرار وأشرطة الـ COO والعودة والحذف والنسخ المخفية */
-  .syscon-print-root button,
-  .syscon-print-root .hidden,
-  .syscon-print-root .no-print,
-  .syscon-print-root .syscon-hide-print {
+  /* إخفاء كافة الأزرار وأشرطة COO و CEO والعودة والحذف من الورقة */
+  #sysconOfficialPrintHost button,
+  #sysconOfficialPrintHost #managementApprovalButtons,
+  #sysconOfficialPrintHost #mobileSheetZoomBar,
+  #sysconOfficialPrintHost #leaderActionBox,
+  #sysconOfficialPrintHost .no-print,
+  #sysconOfficialPrintHost [data-no-print="true"] {
     display: none !important;
   }
 }
 </style>
 
 <script>
-(function sysconSmartAutoPrintAndHrDeliver() {
-  const originalDocTitle = document.title;
+(function bindRealOfficialSheetPrint() {
+  const origDocTitle = document.title;
 
-  function findActiveModalRoot() {
-    // البحث عن النافذة المنبثقة المفتوحة حالياً والتي تحتوي على بيانات التصفية
-    const candidates = Array.from(document.querySelectorAll('div')).filter(el => {
-      if (el.id === 'loginOverlay') return false;
-      const st = window.getComputedStyle(el);
-      if (st.display === 'none' || st.visibility === 'hidden' || el.classList.contains('hidden')) return false;
-      const txt = el.textContent || '';
-      return st.position === 'fixed' && (txt.includes('SYS-') || txt.includes('استمارة التصفية') || txt.includes('اسم التصفية'));
-    });
-
-    if (candidates.length === 0) return null;
-    // أخذ أعلى نافذة مفتوحة والوصول إلى جذرها المباشر تحت body
-    let root = candidates[candidates.length - 1];
-    while (root.parentElement && root.parentElement !== document.body) {
-      root = root.parentElement;
-    }
-    return root;
-  }
-
-  function extractCleanSheetName(modalRoot) {
+  function getSheetTitleName() {
     const s = window.currentReviewItem;
-    if (s && (s.siteName || s.sheetNumber)) {
-      const site = String(s.siteName || '').trim();
-      const code = String(s.sheetNumber || '').trim().toUpperCase();
-      const combined = s.clearanceName || (site && code ? `${site} - ${code}` : (site || code));
-      if (combined) return combined.replace(/[\\\/:*?"<>|]/g, '_');
-    }
-    if (modalRoot) {
-      const m = (modalRoot.textContent || '').match(/([A-Za-z0-9_\-\u0600-\u06FF]+(?:\s+[A-Za-z0-9_\-\u0600-\u06FF]+)*\s*-\s*SYS-\d+)/i);
-      if (m && m[1]) return m[1].trim().replace(/[\\\/:*?"<>|]/g, '_');
-    }
-    return 'تصفية_سيستل';
+    const site = String(s?.siteName || document.getElementById('m_siteName')?.textContent || '').trim();
+    const code = String(s?.sheetNumber || document.getElementById('m_sheetNumber')?.textContent || '').trim().toUpperCase();
+    const name = String(s?.clearanceName || (site && code ? `${site} - ${code}` : (site || code || 'تصفية_سيستل'))).trim();
+    return name.replace(/[\\\/:*?"<>|]/g, '_');
   }
 
-  function preparePrintState() {
-    document.querySelectorAll('.syscon-print-root').forEach(el => el.classList.remove('syscon-print-root'));
-    document.querySelectorAll('.syscon-hide-print').forEach(el => el.classList.remove('syscon-hide-print'));
+  function renderCleanOfficialSheet() {
+    const oldHost = document.getElementById('sysconOfficialPrintHost');
+    if (oldHost) oldHost.remove();
 
-    const root = findActiveModalRoot();
-    if (!root) return;
+    const wrapper = document.getElementById('sheetScrollWrapper');
+    if (!wrapper) return false;
 
-    root.classList.add('syscon-print-root');
-    document.title = extractCleanSheetName(root);
+    document.title = getSheetTitleName();
 
-    // إخفاء شريط أزرار COO / تحميل PDF / عودة العلوي وشريط الحذف / الإرجاع السفلي
-    root.querySelectorAll('div').forEach(div => {
-      if (div.querySelector('button')) {
-        const t = div.textContent || '';
-        if (
-          t.includes('اعتماد COO') ||
-          t.includes('إلغاء اعتماد COO') ||
-          t.includes('تحميل PDF') ||
-          t.includes('إرجاع للتعديل') ||
-          t.includes('حذف نهائي')
-        ) {
-          // التأكد أنه شريط أزرار صغير وليس حاوية الاستمارة نفسها
-          if (!t.includes('Department') && !t.includes('تأجير سيارة')) {
-            div.classList.add('syscon-hide-print');
-          }
-        }
-      }
+    const host = document.createElement('div');
+    host.id = 'sysconOfficialPrintHost';
+
+    const clone = wrapper.cloneNode(true);
+    clone.querySelectorAll('[id]').forEach(el => el.removeAttribute('id'));
+    clone.querySelectorAll('button, .no-print, [data-no-print="true"]').forEach(el => el.remove());
+
+    // إزالة أي transform / zoom / overflow عشان يتناسب مع أي مقاس ورقة (كبير أو صغير)
+    clone.style.cssText = 'width:100% !important; max-width:100% !important; height:auto !important; max-height:none !important; overflow:visible !important; transform:none !important; zoom:1 !important; margin:0 !important; padding:0 !important; background:#ffffff !important;';
+    clone.querySelectorAll('*').forEach(el => {
+      el.style.transform = 'none';
+      el.style.zoom = '1';
     });
+
+    host.appendChild(clone);
+    document.body.appendChild(host);
+    return true;
   }
 
-  function restorePrintState() {
-    document.querySelectorAll('.syscon-print-root').forEach(el => el.classList.remove('syscon-print-root'));
-    document.querySelectorAll('.syscon-hide-print').forEach(el => el.classList.remove('syscon-hide-print'));
-    setTimeout(() => { document.title = originalDocTitle; }, 800);
+  function cleanupOfficialSheet() {
+    const oldHost = document.getElementById('sysconOfficialPrintHost');
+    if (oldHost) oldHost.remove();
+    setTimeout(() => { document.title = origDocTitle; }, 600);
   }
 
-  window.addEventListener('beforeprint', preparePrintState);
-  window.addEventListener('afterprint', restorePrintState);
+  window.addEventListener('beforeprint', renderCleanOfficialSheet);
+  window.addEventListener('afterprint', cleanupOfficialSheet);
 
-  // زر "طباعة وتسليم" في الإدارة المالية HR: يسلم للحسابات ويطبع فوراً بدون توقف
+  // ربط الدالة الحقيقية لزر الطباعة وزر تحميل PDF
+  const runCleanPrint = function() {
+    renderCleanOfficialSheet();
+    window.print();
+  };
+
+  window.printOfficialClearanceSheet = runCleanPrint;
+  window.downloadSheetPDF = runCleanPrint;
+
+  // زر "طباعة وتسليم" في الإدارة المالية HR: يعتمد التسليم ويفتح الطباعة فوراً
   document.addEventListener('click', async function(e) {
     const btn = e.target.closest('button');
     if (!btn) return;
@@ -7330,17 +7293,7 @@
         window.openReviewModal(targetId);
       }
 
-      // انتظار ظهور النافذة بالبيانات ثم إطلاق الطباعة مباشرة
-      let tries = 0;
-      const waitTimer = setInterval(() => {
-        tries++;
-        const root = findActiveModalRoot();
-        if (root || tries >= 12) {
-          clearInterval(waitTimer);
-          preparePrintState();
-          window.print();
-        }
-      }, 60);
+      setTimeout(runCleanPrint, 300);
     }
   }, true);
 })();
