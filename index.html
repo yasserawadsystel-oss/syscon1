@@ -7161,130 +7161,139 @@
 })();
 </script>
 <script>
-(function sysconDirectCleanPrint() {
-  window.printCurrentActiveDocument = function() {
-    const openModals = Array.from(document.querySelectorAll('div[id*="Modal"], div[id*="modal"]'))
-      .filter(el => {
-        const st = window.getComputedStyle(el);
-        return st.display !== 'none' && st.visibility !== 'hidden' && !el.classList.contains('hidden');
-      });
+(function finalGuaranteedClearancePrint() {
+  // 1. تعطيل أي @media print قديم مخفي للصفحة
+  document.querySelectorAll('style').forEach(st => {
+    if (st.textContent && st.textContent.includes('@media print') && st.textContent.includes('visibility: hidden')) {
+      st.textContent = st.textContent.replace(/@media\s+print\s*\{[\s\S]*?\}\s*\}/gi, '');
+    }
+  });
 
-    const target = openModals.length > 0 ? openModals[openModals.length - 1] : document.querySelector('main');
-    if (!target) return alert('يرجى فتح الاستمارة أو التقرير المراد طباعته أولاً.');
+  // 2. دالة الطباعة المباشرة من بيانات الاستمارة الحقيقية (مستحيل تطلع بيضاء)
+  window.printClearanceSheet = function() {
+    const s = window.currentReviewItem;
+    if (!s) {
+      alert('يرجى فتح استمارة التصفية أولاً ثم الضغط على طباعة.');
+      return;
+    }
 
-    const clone = target.cloneNode(true);
-    clone.querySelectorAll('button, .no-print, [data-no-print="true"], input[type="file"], script, style').forEach(el => el.remove());
+    const code = (s.sheetNumber || 'SYS-0000').toUpperCase();
+    const site = s.siteName || '-';
+    const region = s.region || '-';
+    const dept = s.department || '-';
+    const act = s.activityType || '-';
+    const eng = s.submittedByEngineer || '-';
+    const ldr = s.teamLeader || '-';
+    const members = Array.isArray(s.teamMembers) ? s.teamMembers.join(' ، ') : (s.teamMembers || '-');
+    const dates = `${s.startDate || '-'} إلى ${s.endDate || '-'}`;
+    const adv = parseFloat(s.advanceAmount) || 0;
+    const items = Array.isArray(s.items) ? s.items : [];
+    const totalExp = items.reduce((a, b) => a + (parseFloat(b.amount) || 0), 0);
+    const net = adv - totalExp;
 
-    // نقل قيم الحقول المكتوبة
-    const origInputs = target.querySelectorAll('input, textarea, select');
-    const cloneInputs = clone.querySelectorAll('input, textarea, select');
-    origInputs.forEach((inp, i) => {
-      if (!cloneInputs[i]) return;
-      const val = inp.tagName === 'SELECT' ? (inp.options[inp.selectedIndex]?.text || '') : (inp.value || '');
-      const span = document.createElement('span');
-      span.textContent = val;
-      span.style.cssText = 'font-weight:bold; color:#000;';
-      cloneInputs[i].replaceWith(span);
-    });
+    // أخذ صورة التوقيع أو الـ QR إن وجدا
+    const sigImg = s.signatureData ? `<img src="${s.signatureData}" style="max-height:55px; max-width:140px;">` : '<span>غير موقع</span>';
+    const qrEl = document.querySelector('#m_qrAndCodeContainer img');
+    const qrImg = qrEl ? `<img src="${qrEl.src}" style="width:65px; height:65px;">` : '';
 
-    // تحويل التوقيعات والرسوم إلى صور ثابتة
-    const origCanvases = target.querySelectorAll('canvas');
-    const cloneCanvases = clone.querySelectorAll('canvas');
-    origCanvases.forEach((cv, i) => {
-      if (!cloneCanvases[i]) return;
-      try {
-        const img = document.createElement('img');
-        img.src = cv.toDataURL('image/png');
-        img.style.cssText = 'max-width:180px; max-height:70px; display:inline-block;';
-        cloneCanvases[i].replaceWith(img);
-      } catch (e) {}
-    });
+    const rowsHtml = items.length > 0
+      ? items.map((it, idx) => `
+          <tr>
+            <td style="text-align:center;">${idx + 1}</td>
+            <td>${it.category || '-'}</td>
+            <td>${it.description || '-'}</td>
+            <td style="font-weight:bold;">${(parseFloat(it.amount) || 0).toLocaleString()} ج.م</td>
+          </tr>
+        `).join('')
+      : `<tr><td colspan="4" style="text-align:center;">لا توجد بنود مصروفات مسجلة</td></tr>`;
 
-    // إزالة أي كلاسات تخفي العناصر
-    clone.querySelectorAll('.hidden').forEach(el => el.classList.remove('hidden'));
+    const win = window.open('', '_blank', 'width=950,height=750');
+    if (!win) {
+      alert('المتصفح حظر نافذة الطباعة (Pop-up). يرجى السماح بالنوافذ المنبثقة لهذا الموقع من شريط العنوان أعلى المتصفح.');
+      return;
+    }
 
-    const printWin = window.open('', '_blank', 'width=950,height=750');
-    if (!printWin) return alert('يرجى السماح بالنوافذ المنبثقة (Pop-ups) في المتصفح لإتمام الطباعة.');
-
-    printWin.document.open();
-    printWin.document.write(`
+    win.document.open();
+    win.document.write(`
       <!DOCTYPE html>
       <html lang="ar" dir="rtl">
       <head>
         <meta charset="UTF-8">
-        <title>طباعة مستند - شركة سيستل للاتصالات</title>
+        <title>تصفية ${code} - ${site}</title>
         <style>
           @page { size: auto; margin: 8mm; }
           * { box-sizing: border-box; font-family: 'Segoe UI', Tahoma, Arial, sans-serif; }
-          html, body {
-            background: #ffffff !important;
-            color: #000000 !important;
-            margin: 0;
-            padding: 8px;
-            width: 100%;
-            direction: rtl;
-          }
-          .header-bar {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            border-bottom: 2px solid #0284c7;
-            padding-bottom: 8px;
-            margin-bottom: 12px;
-          }
-          .header-bar h2 { margin: 0; font-size: 16px; color: #0f172a; }
-          .header-bar span { font-size: 11px; color: #475569; }
-          div { max-width: 100% !important; position: static !important; transform: none !important; overflow: visible !important; }
-          .grid { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 8px; }
-          .grid > div { flex: 1 1 30%; border: 1px solid #cbd5e1; padding: 6px 8px; border-radius: 6px; background: #f8fafc; }
-          table {
-            width: 100% !important;
-            border-collapse: collapse !important;
-            margin: 10px 0 !important;
-            font-size: 11px !important;
-          }
-          th, td {
-            border: 1px solid #94a3b8 !important;
-            padding: 5px 7px !important;
-            text-align: right !important;
-            color: #000000 !important;
-            word-break: break-word;
-          }
-          th { background-color: #e2e8f0 !important; font-weight: bold !important; }
-          img { max-width: 120px; height: auto; }
-          @media print {
-            body { padding: 0; }
-            tr, img { page-break-inside: avoid; }
-          }
+          body { margin: 0; padding: 10px; background: #fff; color: #000; direction: rtl; font-size: 12px; }
+          .top { display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #0284c7; padding-bottom: 8px; margin-bottom: 10px; }
+          .info-grid { display: table; width: 100%; border-collapse: collapse; margin-bottom: 10px; }
+          .info-grid td { border: 1px solid #cbd5e1; padding: 5px 8px; width: 33.3%; }
+          .label { color: #475569; font-size: 10.5px; display: block; }
+          .val { font-weight: bold; font-size: 12px; color: #0f172a; }
+          table.items { width: 100%; border-collapse: collapse; margin-bottom: 10px; }
+          table.items th { background: #e2e8f0; border: 1px solid #94a3b8; padding: 6px; text-align: right; font-size: 11.5px; }
+          table.items td { border: 1px solid #cbd5e1; padding: 5px 7px; font-size: 11.5px; }
+          .totals { display: flex; justify-content: space-between; background: #f8fafc; border: 1.5px solid #0284c7; padding: 8px 12px; border-radius: 6px; margin-bottom: 12px; font-weight: bold; }
+          .signs { display: flex; justify-content: space-between; text-align: center; margin-top: 15px; }
+          .sign-box { width: 30%; border: 1px dashed #94a3b8; padding: 6px; border-radius: 6px; }
+          @media print { body { padding: 0; } }
         </style>
       </head>
       <body>
-        <div class="header-bar">
-          <h2>شركة سيستل للاتصالات - SYSCON</h2>
-          <span>تاريخ الطباعة: ${new Date().toLocaleDateString('ar-EG')}</span>
+        <div class="top">
+          <div>
+            <div style="font-size:16px; font-weight:bold; color:#0284c7;">شركة سيستل للاتصالات - SYSCON</div>
+            <div style="font-size:12px; font-weight:bold;">استمارة تصفية عهدة ومصاريف موقع (${code})</div>
+          </div>
+          <div style="text-align:left;">${qrImg}</div>
         </div>
-        ${clone.innerHTML}
+
+        <table class="info-grid">
+          <tr>
+            <td><span class="label">اسم / كود الموقع</span><span class="val">${site} (${region})</span></td>
+            <td><span class="label">القسم / النشاط</span><span class="val">${dept} - ${act}</span></td>
+            <td><span class="label">الفترة الزمنية</span><span class="val">${dates}</span></td>
+          </tr>
+          <tr>
+            <td><span class="label">مهندس الموقع</span><span class="val">${eng}</span></td>
+            <td><span class="label">التيم ليدر المسؤول</span><span class="val">${ldr}</span></td>
+            <td><span class="label">فريق العمل / السائقين</span><span class="val">${members}</span></td>
+          </tr>
+        </table>
+
+        <table class="items">
+          <thead>
+            <tr>
+              <th style="width:40px; text-align:center;">#</th>
+              <th style="width:25%;">بند المصروف</th>
+              <th>البيان / التفاصيل</th>
+              <th style="width:110px;">المبلغ</th>
+            </tr>
+          </thead>
+          <tbody>${rowsHtml}</tbody>
+        </table>
+
+        <div class="totals">
+          <div>إجمالي العهدة: ${adv.toLocaleString()} ج.م</div>
+          <div>إجمالي المنصرف: ${totalExp.toLocaleString()} ج.م</div>
+          <div style="color:${net >= 0 ? '#047857' : '#be123c'};">الصافي (${net >= 0 ? 'متبقي للمهندس/الشركة' : 'مستحق للمهندس'}): ${Math.abs(net).toLocaleString()} ج.م</div>
+        </div>
+
+        <div class="signs">
+          <div class="sign-box"><div class="label">اعتماد التيم ليدر</div>${sigImg}</div>
+          <div class="sign-box"><div class="label">اعتماد الإدارة الفنية / COO</div><div style="margin-top:18px; font-weight:bold;">${s.cooApproved ? 'معتمد COO' : (s.technicalApproved ? 'معتمد فنياً' : '-')}</div></div>
+          <div class="sign-box"><div class="label">المراجعة المالية (HR)</div><div style="margin-top:18px; font-weight:bold;">${s.deliveredToAccounts || s.hrConfirmed ? 'مُسلّم للحسابات' : '-'}</div></div>
+        </div>
+
         <script>
           window.onload = function() {
-            setTimeout(function() {
-              window.focus();
-              window.print();
-            }, 300);
+            setTimeout(function() { window.focus(); window.print(); }, 250);
           };
         <\/script>
       </body>
       </html>
     `);
-    printWin.document.close();
+    win.document.close();
   };
-
-  window.print = window.printCurrentActiveDocument;
-  document.addEventListener('keydown', function(e) {
-    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'p') {
-      e.preventDefault();
-      window.printCurrentActiveDocument();
-    }
-  });
 })();
 </script>
 </body>
