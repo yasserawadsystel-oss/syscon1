@@ -7160,5 +7160,117 @@
   });
 })();
 </script>
+<style id="sysconUniversalPrintFix">
+@media print {
+  @page {
+    size: auto;
+    margin: 6mm;
+  }
+
+  * {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+    box-sizing: border-box !important;
+  }
+
+  html, body {
+    background: #ffffff !important;
+    color: #000000 !important;
+    width: 100% !important;
+    height: auto !important;
+    min-height: 0 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    overflow: visible !important;
+  }
+
+  /* إخفاء كل عناصر التطبيق غير المطلوبة في الطباعة */
+  body.sys-printing-modal > *:not(.sys-print-target),
+  header, nav, #loginOverlay, #sysconMobileBottomNav,
+  .no-print, button, [data-no-print="true"] {
+    display: none !important;
+  }
+
+  /* تحرير المودال أو الاستمارة المفتوحة من fixed و overflow */
+  .sys-print-target,
+  .sys-print-target > div {
+    position: static !important;
+    inset: auto !important;
+    transform: none !important;
+    display: block !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    height: auto !important;
+    max-height: none !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    overflow: visible !important;
+    background: #ffffff !important;
+    color: #000000 !important;
+    box-shadow: none !important;
+    border: none !important;
+  }
+
+  /* ضبط الجداول والنصوص لتتناسب مع أي مقاس ورقة (كبيرة أو صغيرة) */
+  .sys-print-target table {
+    width: 100% !important;
+    max-width: 100% !important;
+    border-collapse: collapse !important;
+    table-layout: auto !important;
+    font-size: 10.5px !important;
+  }
+
+  .sys-print-target th,
+  .sys-print-target td {
+    padding: 4px 6px !important;
+    word-break: break-word !important;
+    white-space: normal !important;
+    color: #000000 !important;
+    border-color: #cbd5e1 !important;
+  }
+
+  .sys-print-target img,
+  .sys-print-target canvas,
+  .sys-print-target svg {
+    max-width: 100% !important;
+    height: auto !important;
+    page-break-inside: avoid !important;
+  }
+
+  .sys-print-target tr {
+    page-break-inside: avoid !important;
+  }
+}
+</style>
+
+<script>
+(function bindSmartResponsivePrint() {
+  function preparePrintTarget() {
+    document.querySelectorAll('.sys-print-target').forEach(el => el.classList.remove('sys-print-target'));
+    document.body.classList.remove('sys-printing-modal');
+
+    // البحث عن المودال المفتوح حالياً (استمارة تصفية أو تقرير شامل)
+    const openModals = Array.from(document.querySelectorAll('div[id*="Modal"], div[id*="modal"]'))
+      .filter(el => {
+        const st = window.getComputedStyle(el);
+        return st.display !== 'none' && st.visibility !== 'hidden' && !el.classList.contains('hidden');
+      });
+
+    if (openModals.length > 0) {
+      const topModal = openModals[openModals.length - 1];
+      topModal.classList.add('sys-print-target');
+      document.body.classList.add('sys-printing-modal');
+    }
+  }
+
+  function cleanupPrintTarget() {
+    document.querySelectorAll('.sys-print-target').forEach(el => el.classList.remove('sys-print-target'));
+    document.body.classList.remove('sys-printing-modal');
+  }
+
+  window.addEventListener('beforeprint', preparePrintTarget);
+  window.addEventListener('afterprint', cleanupPrintTarget);
+})();
+</script>
 </body>
 </html>
