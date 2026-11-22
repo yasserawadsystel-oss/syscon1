@@ -7160,7 +7160,7 @@
   });
 })();
 </script>
-<style id="sysconFinalMasterPrintStyle">
+<style id="sysconUnlockVisibilityPrint">
 @media print {
   @page {
     size: A4 landscape;
@@ -7170,158 +7170,103 @@
   * {
     -webkit-print-color-adjust: exact !important;
     print-color-adjust: exact !important;
-    box-sizing: border-box !important;
   }
 
   html, body {
     background: #ffffff !important;
     margin: 0 !important;
     padding: 0 !important;
-    width: 100% !important;
     height: auto !important;
     overflow: visible !important;
   }
 
-  /* إخفاء كل عناصر التطبيق ومنع تكرار الورقة نهائياً */
-  body > *:not(#sysconSinglePrintWrapper) {
+  body > *:not(#clearanceReviewModal) {
     display: none !important;
   }
 
-  body > #sysconSinglePrintWrapper {
-    display: block !important;
-    width: 100% !important;
-    max-width: 100% !important;
-    margin: 0 auto !important;
-    padding: 0 !important;
-    background: #ffffff !important;
+  #clearanceReviewModal,
+  #clearanceReviewModal * {
+    visibility: visible !important;
   }
 
-  /* إخفاء كافة الأزرار وأشرطة أدوات COO والعودة والطباعة والحذف */
-  #sysconSinglePrintWrapper button,
-  #sysconSinglePrintWrapper .no-print,
-  #sysconSinglePrintWrapper [data-no-print="true"],
-  #sysconSinglePrintWrapper [onclick] {
+  #clearanceReviewModal {
+    position: static !important;
+    inset: auto !important;
+    display: block !important;
+    width: 100% !important;
+    height: auto !important;
+    background: #ffffff !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    overflow: visible !important;
+  }
+
+  #clearanceReviewModal > div {
+    position: static !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    max-height: none !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    box-shadow: none !important;
+    border: none !important;
+    overflow: visible !important;
+  }
+
+  #clearanceReviewModal button,
+  #clearanceReviewModal [onclick],
+  #clearanceReviewModal .no-print {
     display: none !important;
   }
 }
 </style>
 
 <script>
-(function sysconCompletePrintAndHrDeliverFix() {
-  const defaultTitle = document.title;
+(function fixTitleAndHrDirectPrint() {
+  const baseTitle = document.title;
 
-  function setSheetPrintTitle(item) {
-    const s = item || window.currentReviewItem;
+  function applySheetTitle() {
+    const s = window.currentReviewItem;
     const site = (s?.siteName || document.getElementById('m_siteName')?.textContent || '').trim();
     const code = (s?.sheetNumber || document.getElementById('m_sheetNumber')?.textContent || '').trim().toUpperCase();
-    const fullName = (s?.clearanceName || (site && code ? `${site} - ${code}` : (site || code || 'تصفية_سيستل'))).trim();
-    document.title = fullName.replace(/[\\\/:*?"<>|]/g, '_');
+    const name = (s?.clearanceName || (site && code ? `${site} - ${code}` : (site || code || 'تصفية_سيستل'))).trim();
+    document.title = name.replace(/[\\\/:*?"<>|]/g, '_');
   }
 
-  function prepareOneCleanSheetForPrint() {
-    const old = document.getElementById('sysconSinglePrintWrapper');
-    if (old) old.remove();
+  window.addEventListener('beforeprint', applySheetTitle);
+  window.addEventListener('afterprint', () => { document.title = baseTitle; });
 
-    setSheetPrintTitle(window.currentReviewItem);
-
-    // التقاط ورقة التصفية الداخلية فقط (بدون هيدر وفوتر المودال وأزرار COO)
-    const modal = document.getElementById('clearanceReviewModal');
-    let sheetEl = modal
-      ? (modal.querySelector('#m_printableSheet') || modal.querySelector('.bg-white.text-slate-900') || modal.querySelector('.bg-white'))
-      : null;
-
-    if (!sheetEl) return;
-
-    const wrap = document.createElement('div');
-    wrap.id = 'sysconSinglePrintWrapper';
-
-    const clone = sheetEl.cloneNode(true);
-    // إزالة كل الـ IDs المكررة والأزرار وأشرطة التحكم العلوية والسفلية
-    clone.querySelectorAll('[id]').forEach(el => el.removeAttribute('id'));
-    clone.querySelectorAll('button, .no-print, [data-no-print="true"]').forEach(el => el.remove());
-
-    // حذف الشريط العلوي للمودال إذا كان يحتوي على أزرار (عودة / طباعة / اعتماد COO / تحميل PDF)
-    Array.from(clone.children).forEach(child => {
-      const txt = child.textContent || '';
-      if (txt.includes('اعتماد COO') || txt.includes('إلغاء اعتماد COO') || txt.includes('تحميل PDF') || txt.includes('إرجاع للتعديل')) {
-        child.remove();
-      }
-    });
-
-    clone.style.cssText = 'width:100% !important; max-width:100% !important; margin:0 !important; padding:4px !important; box-shadow:none !important; border:none !important; position:static !important; transform:none !important;';
-    wrap.appendChild(clone);
-    document.body.appendChild(wrap);
-  }
-
-  function cleanupAfterPrint() {
-    const old = document.getElementById('sysconSinglePrintWrapper');
-    if (old) old.remove();
-    document.title = defaultTitle;
-  }
-
-  window.addEventListener('beforeprint', prepareOneCleanSheetForPrint);
-  window.addEventListener('afterprint', cleanupAfterPrint);
-
-  // 1. دالة الطباعة المباشرة من داخل التصفية
-  window.printClearanceSheet = function() {
-    prepareOneCleanSheetForPrint();
-    window.print();
-  };
-
-  // 2. زر "طباعة وتسليم" في الإدارة المالية HR: يسلم للحسابات ويطبع فوراً بدون ما يفتح صفحة ويقف
-  const _origHrDeliver = window.hrDeliverAndPrint || window.deliverToAccountsAndPrint || window.confirmHrDelivery;
-  window.hrDeliverAndPrint = async function(sheetId) {
-    try {
-      const targetId = sheetId || window.currentReviewItem?.id;
-      const list = window.allClearances || window.clearancesData || [];
-      const item = list.find(x => x.id === targetId) || window.currentReviewItem;
-
-      if (item) {
-        window.currentReviewItem = item;
-        setSheetPrintTitle(item);
-      }
-
-      // تحديث الحالة إلى "مُسلمة للحسابات" في قاعدة البيانات مباشرة
-      if (targetId && typeof db !== 'undefined') {
-        const approverName = window.currentUser?.name || 'المراجعة المالية HR';
-        const nowStr = new Date().toLocaleString('ar-EG');
-        await db.collection('clearance_sheets').doc(targetId).update({
-          deliveredToAccounts: true,
-          hrConfirmed: true,
-          hrConfirmedBy: approverName,
-          hrConfirmedAt: nowStr,
-          status: 'مؤرشفة ومُسلمة للحسابات',
-          printCount: firebase.firestore.FieldValue.increment(1)
-        }).catch(() => {});
-      }
-
-      // فتح المودال في الخلفية لملء البيانات ثم إطلاق الطباعة فوراً بدون توقف
-      if (typeof window.openReviewModal === 'function' && targetId) {
-        window.openReviewModal(targetId);
-      }
-
-      setTimeout(() => {
-        prepareOneCleanSheetForPrint();
-        window.print();
-      }, 250);
-    } catch (e) {
-      if (typeof _origHrDeliver === 'function') return _origHrDeliver.apply(this, arguments);
-    }
-  };
-
-  // ربط أي زر في جدول الإدارة المالية مكتوب عليه "طباعة وتسليم" بالدالة الفورية
-  document.addEventListener('click', function(e) {
+  document.addEventListener('click', async function(e) {
     const btn = e.target.closest('button');
     if (!btn) return;
     const txt = (btn.textContent || '').trim();
     if (txt.includes('طباعة وتسليم') || txt.includes('طباعة وتأكيد')) {
       const onclickAttr = btn.getAttribute('onclick') || '';
       const idMatch = onclickAttr.match(/['"]([^'"]+)['"]/);
-      if (idMatch && idMatch[1]) {
-        e.preventDefault();
-        e.stopImmediatePropagation();
-        window.hrDeliverAndPrint(idMatch[1]);
+      const targetId = idMatch ? idMatch[1] : window.currentReviewItem?.id;
+      if (!targetId) return;
+
+      e.preventDefault();
+      e.stopImmediatePropagation();
+
+      if (typeof db !== 'undefined') {
+        await db.collection('clearance_sheets').doc(targetId).update({
+          deliveredToAccounts: true,
+          hrConfirmed: true,
+          hrConfirmedBy: window.currentUser?.name || 'المراجعة المالية HR',
+          hrConfirmedAt: new Date().toLocaleString('ar-EG'),
+          status: 'مؤرشفة ومُسلمة للحسابات'
+        }).catch(() => {});
       }
+
+      if (typeof window.openReviewModal === 'function') {
+        window.openReviewModal(targetId);
+      }
+
+      setTimeout(() => {
+        applySheetTitle();
+        window.print();
+      }, 300);
     }
   }, true);
 })();
