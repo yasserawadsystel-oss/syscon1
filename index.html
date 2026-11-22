@@ -7160,55 +7160,63 @@
   });
 })();
 </script>
-<style id="sysconFinalOfficialSheetPrint">
+<style id="sysconAbsoluteVisiblePrint">
 @media print {
   @page {
-    size: auto;
+    size: A4 landscape;
     margin: 5mm;
   }
 
   * {
     -webkit-print-color-adjust: exact !important;
     print-color-adjust: exact !important;
+    box-sizing: border-box !important;
   }
 
   html, body {
     background: #ffffff !important;
     margin: 0 !important;
     padding: 0 !important;
+    width: 100% !important;
     height: auto !important;
     overflow: visible !important;
   }
 
-  /* إخفاء كل عناصر الصفحة لمنع التكرار (1 page فقط) */
-  body > * {
+  body > *:not(#sysconOfficialPrintHost) {
     display: none !important;
   }
 
-  /* إظهار حاوية الطباعة المعزولة الوحيدة فقط */
-  body > #sysconOfficialPrintHost {
-    display: block !important;
+  body,
+  #sysconOfficialPrintHost,
+  #sysconOfficialPrintHost * {
+    visibility: visible !important;
+  }
+
+  #sysconOfficialPrintHost {
+    display: flex !important;
+    justify-content: center !important;
+    align-items: flex-start !important;
+    position: static !important;
     width: 100% !important;
-    max-width: 100% !important;
     margin: 0 !important;
     padding: 0 !important;
     background: #ffffff !important;
+    overflow: visible !important;
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
   }
 
-  /* إخفاء كافة الأزرار وأشرطة COO و CEO والعودة والحذف من الورقة */
   #sysconOfficialPrintHost button,
-  #sysconOfficialPrintHost #managementApprovalButtons,
-  #sysconOfficialPrintHost #mobileSheetZoomBar,
-  #sysconOfficialPrintHost #leaderActionBox,
   #sysconOfficialPrintHost .no-print,
   #sysconOfficialPrintHost [data-no-print="true"] {
     display: none !important;
+    visibility: hidden !important;
   }
 }
 </style>
 
 <script>
-(function bindRealOfficialSheetPrint() {
+(function bindAbsoluteOfficialPrint() {
   const origDocTitle = document.title;
 
   function getSheetTitleName() {
@@ -7230,20 +7238,31 @@
 
     const host = document.createElement('div');
     host.id = 'sysconOfficialPrintHost';
+    host.style.cssText = 'display:flex; justify-content:center; align-items:flex-start; width:100%; margin:0; padding:0; background:#ffffff;';
 
     const clone = wrapper.cloneNode(true);
     clone.querySelectorAll('[id]').forEach(el => el.removeAttribute('id'));
     clone.querySelectorAll('button, .no-print, [data-no-print="true"]').forEach(el => el.remove());
 
-    // إزالة أي transform / zoom / overflow عشان يتناسب مع أي مقاس ورقة (كبير أو صغير)
-    clone.style.cssText = 'width:100% !important; max-width:100% !important; height:auto !important; max-height:none !important; overflow:visible !important; transform:none !important; zoom:1 !important; margin:0 !important; padding:0 !important; background:#ffffff !important;';
-    clone.querySelectorAll('*').forEach(el => {
-      el.style.transform = 'none';
-      el.style.zoom = '1';
-    });
+    // إزالة خلفية وهوامش الحاوية الرمادية الخارجية للإبقاء على كارت الاستمارة النظيف فقط
+    clone.style.cssText = 'display:flex !important; justify-content:center !important; align-items:flex-start !important; width:100% !important; max-width:none !important; height:auto !important; overflow:visible !important; margin:0 !important; padding:0 !important; background:transparent !important; transform:none !important; zoom:1 !important;';
+
+    const card = clone.firstElementChild || clone;
+    card.style.margin = '0';
+    card.style.transform = 'none';
+    card.style.zoom = '1';
 
     host.appendChild(clone);
     document.body.appendChild(host);
+
+    // القياس الفعلي لكارت الاستمارة ومطابقته مع أبعاد A4 Landscape بالبكسل (287mm × 200mm)
+    const cardW = card.scrollWidth || card.offsetWidth || 1040;
+    const cardH = card.scrollHeight || card.offsetHeight || 460;
+    const printableW = 1076; // 287mm at 96dpi مع هامش أمان
+    const printableH = 746;  // 200mm at 96dpi مع هامش أمان
+    const exactZoom = Math.min(printableW / cardW, printableH / cardH);
+
+    card.style.zoom = exactZoom.toFixed(4);
     return true;
   }
 
@@ -7256,16 +7275,15 @@
   window.addEventListener('beforeprint', renderCleanOfficialSheet);
   window.addEventListener('afterprint', cleanupOfficialSheet);
 
-  // ربط الدالة الحقيقية لزر الطباعة وزر تحميل PDF
   const runCleanPrint = function() {
     renderCleanOfficialSheet();
-    window.print();
+    setTimeout(() => window.print(), 80);
   };
 
   window.printOfficialClearanceSheet = runCleanPrint;
   window.downloadSheetPDF = runCleanPrint;
 
-  // زر "طباعة وتسليم" في الإدارة المالية HR: يعتمد التسليم ويفتح الطباعة فوراً
+  // زر "طباعة وتسليم" في الإدارة المالية HR
   document.addEventListener('click', async function(e) {
     const btn = e.target.closest('button');
     if (!btn) return;
