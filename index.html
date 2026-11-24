@@ -545,7 +545,7 @@
       <div id="formLogin" class="space-y-4 text-xs">
         <div>
           <label class="block font-bold text-slate-300 mb-1.5">اختر البوابة / الصفة الوظيفية:</label>
-          <div id="loginRoleGrid" class="grid grid-cols-2 sm:grid-cols-4 gap-2">
+          <div id="loginRoleGrid" class="grid grid-cols-2 sm:grid-cols-5 gap-2">
             <button type="button" id="roleBtnLeader" onclick="selectLoginRole('leader')" class="p-2.5 rounded-xl border-2 border-sky-500 bg-sky-950/30 font-bold text-sky-300 flex flex-col items-center gap-1 transition cursor-pointer">
               <i data-lucide="briefcase" class="lucide-md"></i><span class="text-[11px]">تيم ليدر</span>
             </button>
@@ -557,6 +557,9 @@
             </button>
             <button type="button" id="roleBtnEngineer" onclick="selectLoginRole('engineer')" class="p-2.5 rounded-xl border-2 border-slate-800 bg-slate-950 font-bold text-slate-400 flex flex-col items-center gap-1 transition cursor-pointer">
               <i data-lucide="hard-hat" class="lucide-md"></i><span class="text-[11px]">مهندس موقع</span>
+            </button>
+            <button type="button" id="roleBtnTechnician" onclick="selectLoginRole('technician')" class="col-span-2 sm:col-span-1 p-2.5 rounded-xl border-2 border-slate-800 bg-slate-950 font-bold text-slate-400 flex flex-col items-center gap-1 transition cursor-pointer">
+              <i data-lucide="user-cog" class="lucide-md"></i><span class="text-[11px]">فني</span>
             </button>
           </div>
         </div>
@@ -611,6 +614,7 @@
           <label class="block font-bold text-slate-300 mb-1">الدور / الوظيفة المطلوبة *</label>
           <select id="regRole" class="sys-input w-full p-2.5 font-bold">
             <option value="engineer">مهندس موقع (يتطلب موافقة الإدارة)</option>
+            <option value="technician">فني (يتطلب موافقة الإدارة)</option>
             <option value="leader">تيم ليدر (يتطلب موافقة الإدارة)</option>
             <option value="hr">المراجعة المالية HR (يتطلب موافقة الإدارة)</option>
             <option value="technical">الإدارة الفنية (يتطلب موافقة الإدارة)</option>
@@ -695,6 +699,12 @@
             <i data-lucide="briefcase" class="lucide-inline"></i>
             <span>الإدارة والاعتماد</span>
             <span id="badgePendingCount" class="bg-amber-400 text-slate-950 px-1.5 py-0.2 rounded-full font-black text-[10px]">0</span>
+          </button>
+
+          <button type="button" id="btnSwitchTechnicians" onclick="setAppMode('technicians')" class="hidden sys-btn-sm text-teal-300 hover:text-teal-200">
+            <i data-lucide="user-cog" class="lucide-inline"></i>
+            <span>قسم الفنيين</span>
+            <span id="badgeTechniciansPendingCount" class="bg-teal-400 text-slate-950 px-1.5 py-0.2 rounded-full font-black text-[10px]">0</span>
           </button>
 
           <button type="button" id="btnSwitchTech" onclick="setAppMode('technical')" class="hidden sys-btn-sm text-slate-400 hover:text-white">
@@ -920,8 +930,166 @@
         </div>
       </div>
     </div>
-<!-- 2. بوابة المهندس (تقديم تصفية + خامات سرية + متابعة المسار والتعديلات) -->
+<!-- 1.5 قسم الفنيين (لوحة مستقلة لتصفيات الفنيين بنفس القواعد والمسار) -->
+    <div id="viewTechnicians" class="hidden space-y-6">
+      <div class="sys-card p-4 sm:p-5 border-teal-500/40 flex flex-wrap items-center justify-between gap-3">
+        <div class="flex items-center gap-3">
+          <div class="w-11 h-11 rounded-2xl bg-teal-500/15 border border-teal-500/40 flex items-center justify-center text-teal-400 shrink-0">
+            <i data-lucide="user-cog" class="lucide-lg"></i>
+          </div>
+          <div>
+            <div class="flex items-center gap-2">
+              <h2 class="text-base font-black text-white">قسم الفنيين</h2>
+              <span class="px-2.5 py-0.5 rounded-full text-[10px] font-black bg-teal-500 text-slate-950">TECHNICIANS</span>
+            </div>
+            <p class="text-xs text-slate-400 mt-0.5">متابعة وفحص واعتماد تصفيات الفنيين بشكل مستقل بنفس قواعد ومسار المهندسين</p>
+          </div>
+        </div>
+        <button type="button" id="btnTechSectionCreateClearance" onclick="openNewTechnicianClearanceForm()" class="sys-btn bg-teal-500 hover:bg-teal-400 text-slate-950">
+          <i data-lucide="plus-circle" class="lucide-inline"></i><span>تصفية فني جديدة</span>
+        </button>
+      </div>
+
+      <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3.5">
+        <div class="sys-card p-4">
+          <div class="flex items-center justify-between text-slate-400 mb-1.5">
+            <span class="text-xs font-bold">إجمالي عهد الفنيين</span>
+            <i data-lucide="coins" class="lucide-md text-teal-400"></i>
+          </div>
+          <div class="flex items-baseline gap-1.5">
+            <span id="techStaffStatAdvance" class="text-xl font-black text-white font-mono">0.00</span>
+            <span class="text-xs text-slate-400">ج.م</span>
+          </div>
+        </div>
+
+        <div class="sys-card p-4">
+          <div class="flex items-center justify-between text-slate-400 mb-1.5">
+            <span class="text-xs font-bold">إجمالي المنصرف</span>
+            <i data-lucide="receipt" class="lucide-md text-cyan-400"></i>
+          </div>
+          <div class="flex items-baseline gap-1.5">
+            <span id="techStaffStatExpenses" class="text-xl font-black text-cyan-400 font-mono">0.00</span>
+            <span class="text-xs text-slate-400">ج.م</span>
+          </div>
+        </div>
+
+        <div class="sys-card p-4">
+          <div class="flex items-center justify-between text-slate-400 mb-1.5">
+            <span class="text-xs font-bold">صافي التصفية</span>
+            <i data-lucide="scale" class="lucide-md text-emerald-400"></i>
+          </div>
+          <div class="flex items-baseline gap-1.5">
+            <span id="techStaffStatNet" class="text-xl font-black text-emerald-400 font-mono">0.00</span>
+            <span class="text-xs text-slate-400">ج.م</span>
+          </div>
+        </div>
+
+        <div class="sys-card p-4 border-amber-500/30">
+          <div class="flex items-center justify-between text-amber-400 mb-1.5">
+            <span class="text-xs font-extrabold">بانتظار الفحص</span>
+            <span class="w-2.5 h-2.5 rounded-full bg-amber-400 live-dot"></span>
+          </div>
+          <div class="flex items-baseline gap-1.5">
+            <span id="techStaffStatPending" class="text-xl font-black text-amber-400 font-mono">0</span>
+            <span class="text-xs text-slate-400">استمارة</span>
+          </div>
+        </div>
+
+        <div onclick="openEngineersDirectoryModal(); setDirectoryFilterMode('TECHNICIAN');" class="sys-card p-4 border-teal-500/35 hover:border-teal-400 cursor-pointer">
+          <div class="flex items-center justify-between text-teal-300 mb-1.5">
+            <span class="text-xs font-extrabold">الفنيون المسجلون</span>
+            <i data-lucide="user-cog" class="lucide-md text-teal-400"></i>
+          </div>
+          <div class="flex items-baseline gap-1.5">
+            <span id="techStaffStatUsersCount" class="text-xl font-black text-teal-300 font-mono">0</span>
+            <span class="text-xs text-slate-400">فني</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="sys-card p-4 flex flex-wrap items-center justify-between gap-3">
+        <div class="flex flex-wrap items-center gap-2.5 flex-1 min-w-[260px]">
+          <div class="relative flex-1 min-w-[180px]">
+            <input type="text" id="techStaffFilterSearch" oninput="renderTechniciansSectionDashboard()" placeholder="بحث بالموقع أو كود SYS- أو اسم الفني..." class="sys-input w-full px-3.5 py-2">
+          </div>
+
+          <select id="techStaffFilterUser" onchange="renderTechniciansSectionDashboard()" class="sys-input px-3 py-2 font-bold text-teal-300">
+            <option value="ALL" selected>جميع الفنيين</option>
+          </select>
+
+          <select id="techStaffFilterStatus" onchange="renderTechniciansSectionDashboard()" class="sys-input px-3 py-2">
+            <option value="ALL" selected>جميع الحالات</option>
+            <option value="PENDING">قيد المراجعة</option>
+            <option value="APPROVED">معتمدة</option>
+            <option value="REJECTED">مرجعة للتعديل</option>
+          </select>
+
+          <select id="techStaffFilterDept" onchange="renderTechniciansSectionDashboard()" class="sys-input px-3 py-2">
+            <option value="ALL" selected>جميع الأقسام</option>
+            <option value="Nokia WE">Nokia WE</option>
+            <option value="NOKIA Orange">NOKIA Orange</option>
+            <option value="NOKIA Etisalat">NOKIA Etisalat</option>
+            <option value="NOKIA EXtra">NOKIA EXtra</option>
+            <option value="NOKIA BSC">NOKIA BSC</option>
+            <option value="GSM(ADM)">GSM(ADM)</option>
+            <option value="Vodafone">Vodafone</option>
+            <option value="Telecom Egypt">Telecom Egypt (WE)</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="sys-card overflow-hidden">
+        <div class="px-5 py-3.5 border-b border-slate-800 flex flex-wrap items-center justify-between gap-2">
+          <div class="flex items-center gap-2">
+            <h3 class="font-bold text-sm text-white">استمارات تصفيات قسم الفنيين</h3>
+            <span id="techStaffTableCountBadge" class="bg-slate-800 text-teal-400 px-2.5 py-0.5 rounded-full text-xs font-bold">0 استمارة</span>
+          </div>
+          <span class="text-xs text-slate-400 flex items-center gap-1.5">
+            <span class="w-2 h-2 rounded-full bg-teal-400 live-dot"></span><span>تحديث لحظي</span>
+          </span>
+        </div>
+
+        <div class="overflow-x-auto">
+          <table class="w-full text-right text-xs">
+            <thead class="bg-slate-950/80 text-slate-400 font-bold border-b border-slate-800">
+              <tr>
+                <th class="py-3 px-4">اسم التصفية (الموقع - الكود)</th>
+                <th class="py-3 px-4">القسم والنشاط</th>
+                <th class="py-3 px-4">الفني والتيم ليدر</th>
+                <th class="py-3 px-4">العهدة</th>
+                <th class="py-3 px-4">المنصرف</th>
+                <th class="py-3 px-4">الصافي</th>
+                <th class="py-3 px-4">مرحلة الاعتماد</th>
+                <th class="py-3 px-4 text-center">الإجراءات</th>
+              </tr>
+            </thead>
+            <tbody id="techStaffTableBody" class="divide-y divide-slate-800/60 text-slate-200"></tbody>
+          </table>
+        </div>
+
+        <div id="techStaffTableEmptyState" class="hidden py-12 text-center text-slate-500">
+          <i data-lucide="inbox" class="lucide-lg mx-auto mb-2 text-slate-600"></i>
+          <p class="text-sm font-semibold text-slate-400">لا توجد تصفيات فنيين مطابقة للفلتر الحالي</p>
+        </div>
+      </div>
+    </div>
+
+<!-- 2. بوابة المهندس / قسم الفنيين (تقديم تصفية + خامات سرية + متابعة المسار والتعديلات) -->
     <div id="viewEngineer" class="hidden max-w-4xl w-full mx-auto space-y-5">
+      <div id="technicianPortalModeBanner" class="hidden sys-card border-teal-500/50 p-3.5 flex flex-wrap items-center justify-between gap-3">
+        <div class="flex items-center gap-2.5">
+          <div class="w-9 h-9 rounded-xl bg-teal-500/15 border border-teal-500/40 text-teal-400 flex items-center justify-center">
+            <i data-lucide="user-cog" class="lucide-md"></i>
+          </div>
+          <div>
+            <div class="text-xs font-black text-teal-300">قسم الفنيين — بوابة تقديم ومتابعة التصفيات</div>
+            <div class="text-[11px] text-slate-400">تُحفظ تصفياتك تلقائياً داخل قسم الفنيين وتخضع لنفس دورة الاعتماد</div>
+          </div>
+        </div>
+        <button type="button" id="btnBackToTechniciansBoard" onclick="window._creatingForTechnicianSection = false; setAppMode('technicians');" class="hidden sys-btn-sm bg-slate-800 hover:bg-slate-700 text-teal-300 border border-slate-700">
+          <i data-lucide="arrow-right" class="lucide-inline"></i><span>رجوع لقسم الفنيين</span>
+        </button>
+      </div>
       <div id="engineerNotificationAlertBar" class="hidden sys-card border-amber-500/50 p-4 flex flex-wrap items-center justify-between gap-3">
         <div class="flex items-center gap-3">
           <i data-lucide="bell-ring" class="lucide-lg text-amber-400"></i>
@@ -946,7 +1114,7 @@
       <div id="engineerSheetsListSection" class="hidden sys-card p-4 sm:p-5 space-y-4">
         <div class="flex flex-wrap items-center justify-between border-b border-slate-800 pb-3 gap-2">
           <div>
-            <h3 class="text-sm font-black text-white">سجل تصفياتي ومتابعة مراحل الاعتماد</h3>
+            <h3 id="engineerSheetsListTitle" class="text-sm font-black text-white">سجل تصفياتي ومتابعة مراحل الاعتماد</h3>
             <p class="text-[11px] text-slate-400 mt-0.5">يوضح موقف كل تصفية وتفاصيل أي إرجاع مطلوب تعديله</p>
           </div>
           <span class="text-xs bg-slate-800 text-sky-400 px-3 py-1 rounded-full font-bold" id="mySheetsCountBadge">0 استمارة</span>
@@ -1704,6 +1872,7 @@
           <button type="button" onclick="setDirectoryFilterMode('HR')" id="dirFilterBtn_HR" class="sys-btn-sm bg-slate-800 text-slate-300 hover:bg-slate-700">المالية HR</button>
           <button type="button" onclick="setDirectoryFilterMode('TECHNICAL')" id="dirFilterBtn_TECHNICAL" class="sys-btn-sm bg-slate-800 text-cyan-300 hover:bg-slate-700">الإدارة الفنية</button>
           <button type="button" onclick="setDirectoryFilterMode('ENGINEER')" id="dirFilterBtn_ENGINEER" class="sys-btn-sm bg-slate-800 text-slate-300 hover:bg-slate-700">مهندس موقع</button>
+          <button type="button" onclick="setDirectoryFilterMode('TECHNICIAN')" id="dirFilterBtn_TECHNICIAN" class="sys-btn-sm bg-slate-800 text-teal-300 hover:bg-slate-700">الفنيين</button>
         </div>
         <div class="relative flex-1 min-w-[200px] max-w-xs">
           <input type="text" id="dirSearchInputBox" oninput="setDirSearchQuery(this.value)" placeholder="بحث بالاسم، الموبايل، أو الإيميل..." class="sys-input w-full px-3 py-1.5">
@@ -2040,16 +2209,16 @@
 
   <!-- شريط تنقل سفلي للموبايل -->
   <nav id="sysconMobileBottomNav" class="md:hidden fixed bottom-0 left-0 right-0 h-16 bg-slate-950/95 backdrop-blur-md border-t border-slate-800 z-40 flex items-center justify-around px-2 no-print">
-    <button type="button" onclick="setAppMode('leader')" class="flex flex-col items-center gap-0.5 text-[10px] font-bold text-sky-400 cursor-pointer">
+    <button type="button" onclick="mobileNavGoHome()" class="flex flex-col items-center gap-0.5 text-[10px] font-bold text-sky-400 cursor-pointer">
       <i data-lucide="layout-dashboard" class="lucide-md"></i><span>الرئيسية</span>
     </button>
     <button type="button" onclick="openNotificationsModal()" class="flex flex-col items-center gap-0.5 text-[10px] font-bold text-slate-400 hover:text-amber-400 cursor-pointer">
       <i data-lucide="bell" class="lucide-md"></i><span>الإشعارات</span>
     </button>
-    <button type="button" onclick="setAppMode('engineer'); switchEngineerSubTab('create');" class="w-12 h-12 -mt-6 rounded-full bg-sky-500 text-slate-950 flex items-center justify-center shadow-lg border-4 border-slate-950 cursor-pointer">
+    <button type="button" onclick="mobileNavCreateClearance()" class="w-12 h-12 -mt-6 rounded-full bg-sky-500 text-slate-950 flex items-center justify-center shadow-lg border-4 border-slate-950 cursor-pointer">
       <i data-lucide="plus" class="lucide-md"></i>
     </button>
-    <button type="button" onclick="setAppMode('leader'); document.getElementById('filterSearch')?.focus();" class="flex flex-col items-center gap-0.5 text-[10px] font-bold text-slate-400 hover:text-sky-300 cursor-pointer">
+    <button type="button" onclick="mobileNavFocusSearch()" class="flex flex-col items-center gap-0.5 text-[10px] font-bold text-slate-400 hover:text-sky-300 cursor-pointer">
       <i data-lucide="search" class="lucide-md"></i><span>بحث</span>
     </button>
     <button type="button" onclick="openChangePasswordModal()" class="flex flex-col items-center gap-0.5 text-[10px] font-bold text-slate-400 hover:text-emerald-400 cursor-pointer">
@@ -2095,6 +2264,7 @@
 
     const ALL_PERMISSIONS_CATALOG = [
       { key: 'canUseEngineerForm', group: 'البوابات', label: 'بوابة المهندس' },
+      { key: 'canViewTechniciansSection', group: 'البوابات', label: 'قسم الفنيين' },
       { key: 'canViewLeaderDashboard', group: 'البوابات', label: 'الإدارة والاعتماد' },
       { key: 'canViewTechnicalDashboard', group: 'البوابات', label: 'الإدارة الفنية' },
       { key: 'canViewHrDashboard', group: 'البوابات', label: 'المراجعة المالية HR' },
@@ -2293,10 +2463,38 @@
       return r === 'hr' || t.includes('hr') || t.includes('مالية') || t.includes('حسابات');
     }
 
+    function isTechnicianStaffRole(role, title) {
+      const r = String(role || '').toLowerCase().trim();
+      const t = String(title || '').trim();
+      if (r === 'technician') return true;
+      if (r === 'technical') return false;
+      if (!t) return false;
+      return (t === 'فني' || t === 'فني موقع' || t.startsWith('فني ')) && !t.includes('فنية') && !t.includes('إدارة') && !t.includes('ادارة');
+    }
+
     function isTechRole(role, title) {
       const r = String(role || '').toLowerCase().trim();
       const t = String(title || '').toLowerCase().trim();
-      return r === 'technical' || t.includes('فنية') || t.includes('فني');
+      if (r === 'technician' || isTechnicianStaffRole(role, title)) return false;
+      return r === 'technical' || t.includes('فنية') || t.includes('إدارة فني') || t.includes('ادارة فني');
+    }
+
+    function isTechnicianClearance(s) {
+      if (!s || typeof s !== 'object') return false;
+      if (s.isTechnicianSheet === true || s.submittedByRole === 'technician' || s.sheetSection === 'technicians') return true;
+      const users = Array.isArray(window.cachedUsersList) ? window.cachedUsersList : [];
+      if (users.length === 0) return false;
+      const uId = String(s.engineerUserId || '').trim();
+      const uEm = String(s.engineerEmail || '').toLowerCase().trim();
+      const uNm = normAr(s.submittedByEngineer || '');
+      const matched = users.find(u => {
+        if (!u || u.isSystemConfigDoc) return false;
+        if (uId && u.id === uId) return true;
+        if (uEm && String(u.email || '').toLowerCase().trim() === uEm) return true;
+        if (uNm && normAr(u.name || u.fullName || '') === uNm) return true;
+        return false;
+      });
+      return matched ? isTechnicianStaffRole(matched.role, matched.jobTitle) : false;
     }
 
     function isUserApproved(u) {
@@ -2314,6 +2512,7 @@
       const em = String(email || '').toLowerCase().trim();
       if (EXECUTIVE_PROFILES[em]) return EXECUTIVE_PROFILES[em].jobTitle;
       if (customTitle) return customTitle;
+      if (isTechnicianStaffRole(role, customTitle)) return 'فني';
       if (isHrRole(role, customTitle)) return 'المراجعة المالية HR';
       if (isTechRole(role, customTitle)) return 'الإدارة الفنية';
       return String(role || '').toLowerCase() === 'leader' ? 'تيم ليدر' : 'مهندس موقع';
@@ -2323,7 +2522,7 @@
       const r = String(roleKey || 'engineer').toLowerCase().trim();
       if (r === 'admin' || r === 'ceo' || r === 'coo') {
         return {
-          canUseEngineerForm: true, canViewLeaderDashboard: true, canViewTechnicalDashboard: true,
+          canUseEngineerForm: true, canViewTechniciansSection: true, canViewLeaderDashboard: true, canViewTechnicalDashboard: true,
           canViewHrDashboard: true, canViewLeadersKpi: true, canViewManpower: true,
           canViewFullReport: true, canViewAuditLogs: true, canViewEngineersDir: true,
           canViewEngineerWallet: true, canApproveClearance: true, canRejectClearance: true,
@@ -2337,7 +2536,7 @@
       }
       if (r === 'hr') {
         return {
-          canUseEngineerForm: false, canViewLeaderDashboard: false, canViewTechnicalDashboard: false,
+          canUseEngineerForm: false, canViewTechniciansSection: false, canViewLeaderDashboard: false, canViewTechnicalDashboard: false,
           canViewHrDashboard: true, canViewLeadersKpi: false, canViewManpower: false,
           canViewFullReport: true, canViewAuditLogs: false, canViewEngineersDir: false,
           canViewEngineerWallet: true, canApproveClearance: false, canRejectClearance: false,
@@ -2350,7 +2549,7 @@
       }
       if (r === 'technical') {
         return {
-          canUseEngineerForm: false, canViewLeaderDashboard: false, canViewTechnicalDashboard: true,
+          canUseEngineerForm: false, canViewTechniciansSection: false, canViewLeaderDashboard: false, canViewTechnicalDashboard: true,
           canViewHrDashboard: false, canViewLeadersKpi: false, canViewManpower: false,
           canViewFullReport: false, canViewAuditLogs: false, canViewEngineersDir: false,
           canViewEngineerWallet: false, canApproveClearance: false, canRejectClearance: false,
@@ -2363,7 +2562,7 @@
       }
       if (r === 'leader') {
         return {
-          canUseEngineerForm: true, canViewLeaderDashboard: true, canViewTechnicalDashboard: false,
+          canUseEngineerForm: true, canViewTechniciansSection: true, canViewLeaderDashboard: true, canViewTechnicalDashboard: false,
           canViewHrDashboard: false, canViewLeadersKpi: false, canViewManpower: false,
           canViewFullReport: false, canViewAuditLogs: false, canViewEngineersDir: false,
           canViewEngineerWallet: true, canApproveClearance: true, canRejectClearance: true,
@@ -2374,8 +2573,21 @@
           canManageUsers: false, canBackupSystem: false, canToggleMaintenance: false
         };
       }
+      if (r === 'technician') {
+        return {
+          canUseEngineerForm: true, canViewTechniciansSection: true, canViewLeaderDashboard: false, canViewTechnicalDashboard: false,
+          canViewHrDashboard: false, canViewLeadersKpi: false, canViewManpower: false,
+          canViewFullReport: false, canViewAuditLogs: false, canViewEngineersDir: false,
+          canViewEngineerWallet: false, canApproveClearance: false, canRejectClearance: false,
+          canApproveTechnical: false, canReturnTechToLeader: false, canConfirmHrClearance: false,
+          canReturnHrToLeader: false, canApproveCoo: false, canApproveCeo: false,
+          canEditExpenses: false, canAddExpenseRow: true, canDeleteClearance: false,
+          canExportExcel: false, canPrintPdf: false, canSeeAllClearances: false,
+          canManageUsers: false, canBackupSystem: false, canToggleMaintenance: false
+        };
+      }
       return {
-        canUseEngineerForm: true, canViewLeaderDashboard: false, canViewTechnicalDashboard: false,
+        canUseEngineerForm: true, canViewTechniciansSection: false, canViewLeaderDashboard: false, canViewTechnicalDashboard: false,
         canViewHrDashboard: false, canViewLeadersKpi: false, canViewManpower: false,
         canViewFullReport: false, canViewAuditLogs: false, canViewEngineersDir: false,
         canViewEngineerWallet: false, canApproveClearance: false, canRejectClearance: false,
@@ -2392,9 +2604,10 @@
       if (isMasterAdmin(window.currentUser.email)) return true;
       const p = window.currentUser.permissions || {};
       if (typeof p[key] === 'boolean') return p[key];
-      const roleKey = isHrRole(window.currentUser.role, window.currentUser.jobTitle) ? 'hr'
+      const roleKey = isTechnicianStaffRole(window.currentUser.role, window.currentUser.jobTitle) ? 'technician'
+        : (isHrRole(window.currentUser.role, window.currentUser.jobTitle) ? 'hr'
         : (isTechRole(window.currentUser.role, window.currentUser.jobTitle) ? 'technical'
-        : (String(window.currentUser.role || '').toLowerCase() === 'leader' ? 'leader' : 'engineer'));
+        : (String(window.currentUser.role || '').toLowerCase() === 'leader' ? 'leader' : 'engineer')));
       return !!getRoleTemplate(roleKey)[key];
     }
 
@@ -2642,7 +2855,7 @@
       const engBar = document.getElementById('engineerNotificationAlertBar');
       const engTxt = document.getElementById('engineerLatestNotifText');
       if (engBar && engTxt) {
-        if (unread.length > 0 && window.currentUser.role === 'engineer') {
+        if (unread.length > 0 && (window.currentUser.role === 'engineer' || window.currentUser.role === 'technician')) {
           engBar.classList.remove('hidden');
           engTxt.innerText = `${unread[0].actionTitle}: ${unread[0].message}`;
         } else engBar.classList.add('hidden');
@@ -2660,7 +2873,7 @@
 
       emptyEl.classList.add('hidden');
       container.innerHTML = list.map(n => {
-        const canEdit = n.sheetId && (n.actionTitle || '').includes('إرجاع') && window.currentUser.role === 'engineer';
+        const canEdit = n.sheetId && (n.actionTitle || '').includes('إرجاع') && (window.currentUser.role === 'engineer' || window.currentUser.role === 'technician');
         return `
           <div class="p-3.5 rounded-xl border ${!n.isRead ? 'bg-slate-950 border-sky-500/60' : 'bg-slate-950/50 border-slate-800'} flex items-start justify-between gap-3">
             <div class="space-y-1">
@@ -2768,12 +2981,14 @@
         leader: { id: 'roleBtnLeader', act: 'p-2.5 rounded-xl border-2 border-sky-500 bg-sky-950/30 font-bold text-sky-300 flex flex-col items-center gap-1 transition cursor-pointer' },
         hr: { id: 'roleBtnHr', act: 'p-2.5 rounded-xl border-2 border-emerald-500 bg-emerald-950/30 font-bold text-emerald-300 flex flex-col items-center gap-1 transition cursor-pointer' },
         technical: { id: 'roleBtnTech', act: 'p-2.5 rounded-xl border-2 border-cyan-500 bg-cyan-950/30 font-bold text-cyan-300 flex flex-col items-center gap-1 transition cursor-pointer' },
-        engineer: { id: 'roleBtnEngineer', act: 'p-2.5 rounded-xl border-2 border-amber-500 bg-amber-950/20 font-bold text-amber-300 flex flex-col items-center gap-1 transition cursor-pointer' }
+        engineer: { id: 'roleBtnEngineer', act: 'p-2.5 rounded-xl border-2 border-amber-500 bg-amber-950/20 font-bold text-amber-300 flex flex-col items-center gap-1 transition cursor-pointer' },
+        technician: { id: 'roleBtnTechnician', act: 'col-span-2 sm:col-span-1 p-2.5 rounded-xl border-2 border-teal-500 bg-teal-950/30 font-bold text-teal-300 flex flex-col items-center gap-1 transition cursor-pointer' }
       };
       const idle = 'p-2.5 rounded-xl border-2 border-slate-800 bg-slate-950 font-bold text-slate-400 flex flex-col items-center gap-1 transition cursor-pointer';
+      const idleTech = 'col-span-2 sm:col-span-1 p-2.5 rounded-xl border-2 border-slate-800 bg-slate-950 font-bold text-slate-400 flex flex-col items-center gap-1 transition cursor-pointer';
       Object.keys(map).forEach(k => {
         const el = document.getElementById(map[k].id);
-        if (el) el.className = (k === role) ? map[k].act : idle;
+        if (el) el.className = (k === role) ? map[k].act : (k === 'technician' ? idleTech : idle);
       });
     };
 
@@ -3146,23 +3361,30 @@
       show(document.getElementById('btnSysBackupJson'), isMaster || hasPerm('canBackupSystem'));
       show(document.getElementById('btnHeaderEngineerWallet'), isMaster || hasPerm('canViewEngineerWallet'));
 
+      const isTechStaff = isTechnicianStaffRole(window.currentUser.role, window.currentUser.jobTitle);
       const allowLead = isMaster || hasPerm('canViewLeaderDashboard');
+      const allowTechnicians = isMaster || isTechStaff || hasPerm('canViewTechniciansSection');
       const allowTech = isMaster || hasPerm('canViewTechnicalDashboard');
       const allowHr = isMaster || hasPerm('canViewHrDashboard');
       const allowKpi = isMaster || hasPerm('canViewLeadersKpi');
       const allowMp = isMaster || hasPerm('canViewManpower');
-      const allowEng = isMaster || hasPerm('canUseEngineerForm');
+      const allowEng = !isTechStaff ? (isMaster || hasPerm('canUseEngineerForm')) : false;
 
       show(document.getElementById('btnSwitchLeader'), allowLead);
+      show(document.getElementById('btnSwitchTechnicians'), allowTechnicians);
       show(document.getElementById('btnSwitchTech'), allowTech);
       show(document.getElementById('btnSwitchHr'), allowHr);
       show(document.getElementById('btnSwitchKpi'), allowKpi);
       show(document.getElementById('btnSwitchManpower'), allowMp);
       show(document.getElementById('btnSwitchEngineer'), allowEng);
 
+      const techBadge = document.getElementById('badgeTechniciansPendingCount');
+      if (techBadge) techBadge.classList.toggle('hidden', isTechStaff && !allowLead && !isMaster);
+
       show(document.getElementById('btnHeaderFullReport'), isMaster || hasPerm('canViewFullReport'));
       show(document.getElementById('btnHeaderAuditLogs'), isMaster || hasPerm('canViewAuditLogs'));
-      show(document.getElementById('btnLeaderQuickCreateClearance'), allowLead && allowEng);
+      show(document.getElementById('btnLeaderQuickCreateClearance'), allowLead && (isMaster || hasPerm('canUseEngineerForm')));
+      show(document.getElementById('btnTechSectionCreateClearance'), isMaster || hasPerm('canUseEngineerForm') || allowLead);
 
       const canSeeDir = isMaster || hasPerm('canViewEngineersDir') || hasPerm('canManageUsers');
       const dirCard = document.querySelector('[onclick="openEngineersDirectoryModal()"]');
@@ -3176,39 +3398,79 @@
       renderOnlineBar();
       populateLeadersSelect();
       refreshEngineersFilter();
+      if (typeof window.refreshTechniciansFilter === 'function') window.refreshTechniciansFilter();
       refreshIcons();
     }
 
+    function updateClearanceFormSectionMode(isTechMode) {
+      const banner = document.getElementById('technicianPortalModeBanner');
+      const backBtn = document.getElementById('btnBackToTechniciansBoard');
+      const formTitle = document.getElementById('engineerFormHeaderTitle');
+      const listTitle = document.getElementById('engineerSheetsListTitle');
+      const isPlainTech = isTechnicianStaffRole(window.currentUser.role, window.currentUser.jobTitle) && !isMasterAdmin() && !hasPerm('canViewLeaderDashboard');
+
+      if (banner) banner.classList.toggle('hidden', !isTechMode);
+      if (backBtn) backBtn.classList.toggle('hidden', !(isTechMode && !isPlainTech));
+      if (formTitle) formTitle.textContent = isTechMode ? 'قسم الفنيين — بيانات التصفية' : 'بيانات التصفية';
+      if (listTitle) listTitle.textContent = isTechMode ? 'قسم الفنيين — سجل تصفياتي ومتابعة مراحل الاعتماد' : 'سجل تصفياتي ومتابعة مراحل الاعتماد';
+    }
+
+    window.openNewTechnicianClearanceForm = function() {
+      window._creatingForTechnicianSection = true;
+      ['viewLeader', 'viewTechnicians', 'viewTechnical', 'viewHr', 'viewLeadersKpi', 'viewManpower', 'viewEngineer'].forEach(id => {
+        document.getElementById(id)?.classList.add('hidden');
+      });
+      document.getElementById('viewEngineer')?.classList.remove('hidden');
+      updateClearanceFormSectionMode(true);
+      switchEngineerSubTab('create');
+      refreshIcons();
+    };
+
     window.setAppMode = function(mode) {
       const isMaster = isMasterAdmin(window.currentUser.email);
+      const isTechStaff = isTechnicianStaffRole(window.currentUser.role, window.currentUser.jobTitle);
+      const isPlainTech = isTechStaff && !isMaster && !hasPerm('canViewLeaderDashboard');
+
+      if (isPlainTech && mode === 'engineer') mode = 'technicians';
+
       const permMap = {
         leader: isMaster || hasPerm('canViewLeaderDashboard'),
+        technicians: isMaster || isTechStaff || hasPerm('canViewTechniciansSection'),
         technical: isMaster || hasPerm('canViewTechnicalDashboard'),
         hr: isMaster || hasPerm('canViewHrDashboard'),
         kpi: isMaster || hasPerm('canViewLeadersKpi'),
         manpower: isMaster || hasPerm('canViewManpower'),
-        engineer: isMaster || hasPerm('canUseEngineerForm')
+        engineer: !isPlainTech && (isMaster || hasPerm('canUseEngineerForm'))
       };
 
       if (!permMap[mode]) {
-        mode = Object.keys(permMap).find(k => permMap[k]) || 'engineer';
+        mode = Object.keys(permMap).find(k => permMap[k]) || (isPlainTech ? 'technicians' : 'engineer');
       }
+
+      if (mode !== 'technicians') window._creatingForTechnicianSection = false;
 
       window.currentUser.activeViewMode = mode;
       saveSession();
 
-      ['viewLeader', 'viewTechnical', 'viewHr', 'viewLeadersKpi', 'viewManpower', 'viewEngineer'].forEach(id => {
+      ['viewLeader', 'viewTechnicians', 'viewTechnical', 'viewHr', 'viewLeadersKpi', 'viewManpower', 'viewEngineer'].forEach(id => {
         document.getElementById(id)?.classList.add('hidden');
       });
 
-      const viewMap = {
-        leader: 'viewLeader', technical: 'viewTechnical', hr: 'viewHr',
-        kpi: 'viewLeadersKpi', manpower: 'viewManpower', engineer: 'viewEngineer'
-      };
-      document.getElementById(viewMap[mode])?.classList.remove('hidden');
+      if (mode === 'technicians' && isPlainTech) {
+        document.getElementById('viewEngineer')?.classList.remove('hidden');
+        updateClearanceFormSectionMode(true);
+      } else {
+        const viewMap = {
+          leader: 'viewLeader', technicians: 'viewTechnicians', technical: 'viewTechnical', hr: 'viewHr',
+          kpi: 'viewLeadersKpi', manpower: 'viewManpower', engineer: 'viewEngineer'
+        };
+        document.getElementById(viewMap[mode])?.classList.remove('hidden');
+        if (mode === 'engineer') updateClearanceFormSectionMode(window._creatingForTechnicianSection === true);
+      }
 
       const btnMap = {
         leader: { id: 'btnSwitchLeader', cls: 'sys-btn-sm bg-sky-600 text-white' },
+        technicians: { id: 'btnSwitchTechnicians', cls: 'sys-btn-sm bg-teal-500 text-slate-950' },
         technical: { id: 'btnSwitchTech', cls: 'sys-btn-sm bg-cyan-500 text-slate-950' },
         hr: { id: 'btnSwitchHr', cls: 'sys-btn-sm bg-emerald-600 text-white' },
         kpi: { id: 'btnSwitchKpi', cls: 'sys-btn-sm bg-amber-500 text-slate-950' },
@@ -3222,12 +3484,41 @@
       });
 
       if (mode === 'leader') renderLeaderDashboard();
+      if (mode === 'technicians') {
+        if (isPlainTech) renderMyEngineerSheets();
+        else if (typeof window.renderTechniciansSectionDashboard === 'function') window.renderTechniciansSectionDashboard();
+      }
       if (mode === 'technical') renderTechnicalDashboard();
       if (mode === 'hr') renderHrDashboard();
       if (mode === 'kpi') renderKpiAndBomDashboard();
       if (mode === 'manpower') { populateMpDropdowns(); applyManpowerFilters(); }
       if (mode === 'engineer') renderMyEngineerSheets();
       refreshIcons();
+    };
+
+    window.mobileNavGoHome = function() {
+      const isPlainTech = isTechnicianStaffRole(window.currentUser.role, window.currentUser.jobTitle) && !isMasterAdmin() && !hasPerm('canViewLeaderDashboard');
+      if (isPlainTech) { setAppMode('technicians'); switchEngineerSubTab('list'); }
+      else if (window.currentUser.role === 'engineer' && !hasPerm('canViewLeaderDashboard')) { setAppMode('engineer'); switchEngineerSubTab('list'); }
+      else setAppMode('leader');
+    };
+
+    window.mobileNavCreateClearance = function() {
+      const isPlainTech = isTechnicianStaffRole(window.currentUser.role, window.currentUser.jobTitle) && !isMasterAdmin() && !hasPerm('canViewLeaderDashboard');
+      if (isPlainTech) { setAppMode('technicians'); switchEngineerSubTab('create'); }
+      else if (window.currentUser.activeViewMode === 'technicians') { openNewTechnicianClearanceForm(); }
+      else { setAppMode('engineer'); switchEngineerSubTab('create'); }
+    };
+
+    window.mobileNavFocusSearch = function() {
+      if (window.currentUser.activeViewMode === 'technicians' && !document.getElementById('viewTechnicians')?.classList.contains('hidden')) {
+        document.getElementById('techStaffFilterSearch')?.focus();
+      } else if (hasPerm('canViewLeaderDashboard') || isMasterAdmin()) {
+        setAppMode('leader');
+        document.getElementById('filterSearch')?.focus();
+      } else {
+        mobileNavGoHome();
+      }
     };
 
     // 5. لوحة الإدارة والتيم ليدر والرسم البياني
@@ -3699,7 +3990,10 @@
       const s = window.cachedClearancesList.find(x => x.id === sheetId);
       if (!s) return alert('لم يتم العثور على الاستمارة.');
       editingRejectedSheetId = s.id;
-      setAppMode('engineer');
+      const isTechUser = isTechnicianStaffRole(window.currentUser.role, window.currentUser.jobTitle);
+      window._creatingForTechnicianSection = isTechUser || isTechnicianClearance(s);
+      setAppMode(isTechUser ? 'technicians' : 'engineer');
+      updateClearanceFormSectionMode(window._creatingForTechnicianSection);
       switchEngineerSubTab('create');
 
       document.getElementById('engSiteName').value = s.siteName || '';
@@ -3749,6 +4043,7 @@
 
     window.cancelEditingRejectedSheet = function() {
       editingRejectedSheetId = null;
+      window._creatingForTechnicianSection = isTechnicianStaffRole(window.currentUser.role, window.currentUser.jobTitle);
       document.getElementById('editingRejectedBanner').classList.add('hidden');
       document.getElementById('btnSubmitEngineerClearanceText').innerText = 'إرسال التصفية';
       engineerCurrentItems = [];
@@ -3817,11 +4112,14 @@
       const isSelfLeader = normAr(window.currentUser.name) === normAr(teamLeader) ||
         normAr(teamMembers).split(/[,،\-\/\|]+/).map(x => normAr(x)).includes(normAr(teamLeader));
 
+      const isTechSubmitter = isTechnicianStaffRole(window.currentUser.role, window.currentUser.jobTitle) || window._creatingForTechnicianSection === true;
+
       try {
         if (editingRejectedSheetId) {
           const oldDoc = window.cachedClearancesList.find(x => x.id === editingRejectedSheetId);
           const code = oldDoc ? getFormattedCode(oldDoc) : generateUniqueCode();
           const fullTitle = `${siteName} - ${code}`;
+          const isTechSheet = isTechSubmitter || (oldDoc && isTechnicianClearance(oldDoc));
 
           await db.collection("clearance_sheets").doc(editingRejectedSheetId).update({
             siteName, region, sectorZone: sector, department, activityType, teamCode, teamName,
@@ -3831,16 +4129,19 @@
             status: "pending", isApproved: false, isRejected: false,
             sheetType: isSelfLeader ? 'LEADER_DIRECT' : 'NORMAL',
             isLeaderDirect: isSelfLeader,
+            isTechnicianSheet: isTechSheet,
+            submittedByRole: isTechSheet ? 'technician' : (oldDoc?.submittedByRole || window.currentUser.role || 'engineer'),
+            sheetSection: isTechSheet ? 'technicians' : 'engineers',
             resubmittedAfterCancel: true, lastResubmittedAt: Date.now(),
             items, materialsList: mats, totalMaterialsCost: matCost, grandTotalSiteCost: totalExp + matCost
           });
 
-          logAudit("تعديل وإعادة إرسال تصفية", `التصفية: ${fullTitle}`);
+          logAudit(isTechSheet ? "تعديل وإعادة إرسال تصفية فني" : "تعديل وإعادة إرسال تصفية", `التصفية: ${fullTitle}`);
           await sendNotif({
             targetUserId: teamLeaderId, targetEmail: teamLeaderEmail, targetName: teamLeader,
             isForTeamLeader: true, siteName: fullTitle, sheetId: editingRejectedSheetId,
-            actionTitle: "تصفية معدلة واردة",
-            message: `قام (${window.currentUser.name}) بتعديل وإعادة إرسال التصفية (${fullTitle}).`
+            actionTitle: isTechSheet ? "تصفية فني معدلة (قسم الفنيين)" : "تصفية معدلة واردة",
+            message: `قام ${isTechSheet ? 'الفني ' : ''}(${window.currentUser.name}) بتعديل وإعادة إرسال التصفية (${fullTitle}).`
           });
 
           cancelEditingRejectedSheet();
@@ -3851,6 +4152,7 @@
 
         const code = generateUniqueCode();
         const fullTitle = `${siteName} - ${code}`;
+        const isTechSheet = isTechSubmitter;
 
         const docRef = await db.collection("clearance_sheets").add({
           siteName, region, sectorZone: sector, department, activityType, teamCode, teamName,
@@ -3858,7 +4160,10 @@
           startDate, startTime, endDate, endTime, siteBook, layoutRef, advanceAmount, returnedMaterials,
           engineerUserId: window.currentUser.id || '',
           engineerEmail: String(window.currentUser.email || '').toLowerCase(),
-          submittedByEngineer: window.currentUser.name || 'مهندس موقع',
+          submittedByEngineer: window.currentUser.name || (isTechSheet ? 'فني' : 'مهندس موقع'),
+          isTechnicianSheet: isTechSheet,
+          submittedByRole: isTechSheet ? 'technician' : (window.currentUser.role || 'engineer'),
+          sheetSection: isTechSheet ? 'technicians' : 'engineers',
           sheetNumber: code, clearanceName: fullTitle,
           status: "pending", isSubmitted: true,
           sheetType: isSelfLeader ? 'LEADER_DIRECT' : 'NORMAL',
@@ -3870,8 +4175,8 @@
         await sendNotif({
           targetUserId: teamLeaderId, targetEmail: teamLeaderEmail, targetName: teamLeader,
           isForTeamLeader: true, siteName: fullTitle, sheetId: docRef.id,
-          actionTitle: "تصفية جديدة بانتظار الاعتماد",
-          message: `أرسل (${window.currentUser.name}) تصفية (${fullTitle}) بإجمالي منصرف (${totalExp.toLocaleString()} ج.م).`
+          actionTitle: isTechSheet ? "تصفية فني جديدة (قسم الفنيين)" : "تصفية جديدة بانتظار الاعتماد",
+          message: `أرسل ${isTechSheet ? 'الفني ' : ''}(${window.currentUser.name}) تصفية (${fullTitle}) بإجمالي منصرف (${totalExp.toLocaleString()} ج.م).`
         });
 
         engineerCurrentItems = [];
@@ -3882,8 +4187,14 @@
         renderEngMaterialsTable();
         calcEngTotals();
         goToStep(1);
-        switchEngineerSubTab('list');
-        alert(`تم إرسال التصفية (${fullTitle}) بنجاح.`);
+        const wasAdminCreatingForTech = !isTechnicianStaffRole(window.currentUser.role, window.currentUser.jobTitle) && window._creatingForTechnicianSection === true;
+        window._creatingForTechnicianSection = false;
+        if (wasAdminCreatingForTech) {
+          setAppMode('technicians');
+        } else {
+          switchEngineerSubTab('list');
+        }
+        alert(`تم إرسال التصفية (${fullTitle}) بنجاح${isTechSheet ? ' داخل قسم الفنيين' : ''}.`);
       } catch (e) { alert('خطأ أثناء الإرسال: ' + e.message); }
     };
 
@@ -4183,7 +4494,7 @@
           <tr class="hover:bg-slate-800/40">
             <td class="py-3 px-4 font-bold text-white font-mono">${escapeHtml(getFullDisplayName(s))}<div class="text-[10px] text-slate-400">${escapeHtml(s.region || '-')}</div></td>
             <td class="py-3 px-4 text-sky-300 font-bold">${escapeHtml(s.department || '-')}<div class="text-[10px] text-slate-400 font-normal">${escapeHtml(s.activityType || '-')}</div></td>
-            <td class="py-3 px-4"><div class="font-bold text-white">${escapeHtml(s.submittedByEngineer || '-')}</div><div class="text-[10px] text-amber-300 font-bold">${escapeHtml(s.teamLeader || '-')}</div></td>
+            <td class="py-3 px-4"><div class="font-bold text-white">${escapeHtml(s.submittedByEngineer || '-')}${isTechnicianClearance(s) ? ' <span class="px-1.5 py-0.5 rounded bg-teal-950 text-teal-300 border border-teal-700 text-[9px] font-black">فني</span>' : ''}</div><div class="text-[10px] text-amber-300 font-bold">${escapeHtml(s.teamLeader || '-')}</div></td>
             <td class="py-3 px-4 font-bold text-white font-mono">${adv.toLocaleString()} ج.م</td>
             <td class="py-3 px-4 font-bold text-sky-400 font-mono">${exp.toLocaleString()} ج.م</td>
             <td class="py-3 px-4 font-bold font-mono ${net >= 0 ? 'text-emerald-400' : 'text-rose-400'}">${net.toLocaleString()} ج.م</td>
@@ -4440,7 +4751,7 @@
         : 'موقف الحسابات: قيد المراجعة';
 
       // التحكم في أزرار أسفل الاستمارة
-      const isEng = window.currentUser.role === 'engineer';
+      const isEng = (window.currentUser.role === 'engineer' || window.currentUser.role === 'technician');
       const btnApp = document.getElementById('btnLeaderFinalApprove');
       const btnSav = document.getElementById('btnLeaderSaveChanges');
       const btnCan = document.getElementById('btnLeaderCancelClearance');
@@ -4822,7 +5133,7 @@
     };
     window.setDirectoryFilterMode = function(mode) {
       dirRoleFilter = mode;
-      ['ALL', 'PENDING', 'LEADER', 'HR', 'TECHNICAL', 'ENGINEER'].forEach(k => {
+      ['ALL', 'PENDING', 'LEADER', 'HR', 'TECHNICAL', 'ENGINEER', 'TECHNICIAN'].forEach(k => {
         const b = document.getElementById('dirFilterBtn_' + k);
         if (b) b.className = (k === mode) ? 'sys-btn-sm bg-sky-500 text-slate-950' : 'sys-btn-sm bg-slate-800 text-slate-300 hover:bg-slate-700';
       });
@@ -4845,12 +5156,14 @@
         const pend = !isUserApproved(u);
         const hr = isHrRole(u.role, u.jobTitle);
         const tech = isTechRole(u.role, u.jobTitle);
+        const techStaff = isTechnicianStaffRole(u.role, u.jobTitle);
         const r = String(u.role || '').toLowerCase();
         if (dirRoleFilter === 'PENDING') return pend;
         if (dirRoleFilter === 'HR') return hr;
         if (dirRoleFilter === 'TECHNICAL') return tech;
         if (dirRoleFilter === 'LEADER') return r === 'leader' && !hr && !tech;
-        if (dirRoleFilter === 'ENGINEER') return r === 'engineer';
+        if (dirRoleFilter === 'ENGINEER') return r === 'engineer' && !techStaff;
+        if (dirRoleFilter === 'TECHNICIAN') return techStaff;
         return true;
       });
 
@@ -4876,9 +5189,10 @@
           : ((rLow === 'ceo' || tUp === 'CEO' || em === 'nasser.baset@systel.com.eg') ? 'ceo'
           : ((rLow === 'coo' || tUp === 'COO' || em === 'mohamed.mounir@systel.com.eg') ? 'coo'
           : ((rLow === 'cto' || tUp === 'CTO' || em === 'mohamed.samih@systel.com.eg') ? 'cto'
+          : (isTechnicianStaffRole(e.role, e.jobTitle) ? 'technician'
           : (isHrRole(e.role, e.jobTitle) ? 'hr'
           : (isTechRole(e.role, e.jobTitle) ? 'technical'
-          : (rLow === 'leader' ? 'leader' : 'engineer'))))));
+          : (rLow === 'leader' ? 'leader' : 'engineer')))))));
 
         const roleCell = (canManage && !master)
           ? `<select onchange="changeUserRoleQuick('${e.id}', this.value)" class="sys-input px-2 py-1 text-[11px] font-bold text-sky-300">
@@ -4889,6 +5203,7 @@
                <option value="technical" ${rKey === 'technical' ? 'selected' : ''}>الإدارة الفنية</option>
                <option value="hr" ${rKey === 'hr' ? 'selected' : ''}>المالية HR</option>
                <option value="engineer" ${rKey === 'engineer' ? 'selected' : ''}>مهندس موقع</option>
+               <option value="technician" ${rKey === 'technician' ? 'selected' : ''}>فني</option>
              </select>`
           : `<span class="px-2 py-0.5 rounded bg-sky-950 text-sky-300 border border-sky-800 text-[11px] font-bold">${escapeHtml(getJobTitle(em, e.role, e.jobTitle))}</span>`;
 
@@ -4932,6 +5247,7 @@
         coo: { role: 'coo', jobTitle: 'COO', tpl: 'coo' },
         cto: { role: 'cto', jobTitle: 'CTO', tpl: 'ceo' },
         engineer: { role: 'engineer', jobTitle: 'مهندس موقع', tpl: 'engineer' },
+        technician: { role: 'technician', jobTitle: 'فني', tpl: 'technician' },
         leader: { role: 'leader', jobTitle: 'تيم ليدر', tpl: 'leader' },
         technical: { role: 'technical', jobTitle: 'الإدارة الفنية', tpl: 'technical' },
         hr: { role: 'hr', jobTitle: 'المراجعة المالية HR', tpl: 'hr' }
@@ -5021,6 +5337,7 @@
             <button type="button" onclick="applyPresetToPerms('leader')" class="sys-btn-sm bg-slate-800 text-sky-300">قالب ليدر</button>
             <button type="button" onclick="applyPresetToPerms('technical')" class="sys-btn-sm bg-slate-800 text-cyan-300">قالب فنية</button>
             <button type="button" onclick="applyPresetToPerms('hr')" class="sys-btn-sm bg-slate-800 text-emerald-300">قالب مالية HR</button>
+            <button type="button" onclick="applyPresetToPerms('technician')" class="sys-btn-sm bg-teal-900 text-teal-200">قالب فني</button>
           </div>
           <div class="space-y-3 max-h-[55vh] overflow-y-auto">${groupsHtml}</div>
           <div class="flex justify-end gap-2 pt-2 border-t border-slate-800">
@@ -5110,7 +5427,7 @@
     window.openCashAdvanceLedgerModal = function() {
       if (!isMasterAdmin() && !hasPerm('canViewEngineerWallet') && !hasPerm('canViewHrDashboard')) return alert('غير مصرح.');
       document.getElementById('cashAdvanceLedgerModal')?.remove();
-      const engs = window.cachedUsersList.filter(u => !u.isSystemConfigDoc && isUserApproved(u) && String(u.role || '').toLowerCase() === 'engineer');
+      const engs = window.cachedUsersList.filter(u => !u.isSystemConfigDoc && isUserApproved(u) && (String(u.role || '').toLowerCase() === 'engineer' || isTechnicianStaffRole(u.role, u.jobTitle)));
       const m = document.createElement('div');
       m.id = 'cashAdvanceLedgerModal';
       m.className = 'fixed inset-0 z-[155] bg-slate-950/90 backdrop-blur-md flex items-center justify-center p-4 overflow-y-auto no-print';
@@ -5121,7 +5438,7 @@
             <button type="button" onclick="document.getElementById('cashAdvanceLedgerModal').remove()" class="sys-btn-sm bg-slate-800 text-slate-400 hover:text-white"><i data-lucide="x" class="lucide-inline"></i></button>
           </div>
           <div class="bg-slate-950 p-3.5 rounded-xl border border-slate-800 grid grid-cols-1 sm:grid-cols-5 gap-2 text-xs items-end">
-            <div><label class="block text-slate-400 mb-1 font-bold">المهندس *</label><select id="advEngSel" class="sys-input w-full px-2.5 py-2 font-bold">${engs.map(e => `<option value="${escapeHtml(e.name || e.fullName)}">${escapeHtml(e.name || e.fullName)}</option>`).join('')}</select></div>
+            <div><label class="block text-slate-400 mb-1 font-bold">المهندس / الفني *</label><select id="advEngSel" class="sys-input w-full px-2.5 py-2 font-bold">${engs.map(e => `<option value="${escapeHtml(e.name || e.fullName)}">${escapeHtml(e.name || e.fullName)}${isTechnicianStaffRole(e.role, e.jobTitle) ? ' (فني)' : ''}</option>`).join('')}</select></div>
             <div><label class="block text-slate-400 mb-1 font-bold">المبلغ (ج.م) *</label><input type="number" id="advAmtInp" placeholder="5500" class="sys-input w-full px-2.5 py-2 font-black text-center"></div>
             <div><label class="block text-slate-400 mb-1 font-bold">الطريقة</label><select id="advMethodSel" class="sys-input w-full px-2.5 py-2 font-bold"><option value="فودافون كاش">فودافون كاش</option><option value="InstaPay">InstaPay</option><option value="تحويل بنكي">تحويل بنكي</option><option value="نقدي">نقدي</option></select></div>
             <div><label class="block text-slate-400 mb-1 font-bold">المرجع</label><input type="text" id="advRefInp" placeholder="رقم العملية..." class="sys-input w-full px-2.5 py-2"></div>
@@ -5918,7 +6235,13 @@
 
     // 14. تجميع التحديثات ومستمعي Firebase اللحظيين
     function renderAllViews() {
+      if (typeof window.updateTechniciansPendingBadge === 'function') window.updateTechniciansPendingBadge();
       if (window.currentUser.activeViewMode === 'leader') renderLeaderDashboard();
+      if (window.currentUser.activeViewMode === 'technicians') {
+        const isPlainTech = isTechnicianStaffRole(window.currentUser.role, window.currentUser.jobTitle) && !isMasterAdmin() && !hasPerm('canViewLeaderDashboard');
+        if (isPlainTech) renderMyEngineerSheets();
+        else if (typeof window.renderTechniciansSectionDashboard === 'function') window.renderTechniciansSectionDashboard();
+      }
       if (window.currentUser.activeViewMode === 'technical') renderTechnicalDashboard();
       if (window.currentUser.activeViewMode === 'hr') renderHrDashboard();
       if (window.currentUser.activeViewMode === 'kpi') renderKpiAndBomDashboard();
@@ -5991,7 +6314,8 @@
           if (users.length > 0 && !me) { window.handleLogout(); return; }
           if (!me) return;
           if (me.isOnline === false && me.activeSessionDeviceId === null && me.forceLogoutCommandAt) { window.handleLogout(); return; }
-          window.currentUser.permissions = Object.assign({}, getRoleTemplate(isMasterAdmin(me.email) ? 'admin' : me.role), me.permissions || {});
+          const _meRoleKey = isMasterAdmin(me.email) ? 'admin' : (isTechnicianStaffRole(me.role, me.jobTitle) ? 'technician' : me.role);
+          window.currentUser.permissions = Object.assign({}, getRoleTemplate(_meRoleKey), me.permissions || {});
           window.currentUser.jobTitle = getJobTitle(me.email, me.role, me.jobTitle);
           document.getElementById('headerUserRole').textContent = window.currentUser.jobTitle;
           saveSession();
@@ -6056,6 +6380,8 @@
     });
 
     window.isUpSheet = isUpSheet;
+    window.isTechnicianStaffRole = isTechnicianStaffRole;
+    window.isTechnicianClearance = isTechnicianClearance;
     window.calculateEngineerTotals = calcEngTotals;
     window.saveEngineerFormDraft = saveDraft;
     window.hashSysconPassword = hashPassword;
@@ -6330,12 +6656,16 @@
         db.collection("user_accounts").doc(matched.id).update({ password: hPwd }).catch(() => {});
       }
 
-      const rStr = String(matched.role || '').toLowerCase();
-      const tStr = String(matched.jobTitle || '').toLowerCase();
+      const rStr = String(matched.role || '').toLowerCase().trim();
+      const tStr = String(matched.jobTitle || '').toLowerCase().trim();
+      const isTechStaffUser = typeof window.isTechnicianStaffRole === 'function'
+        ? window.isTechnicianStaffRole(matched.role, matched.jobTitle)
+        : (rStr === 'technician');
       const actualRole = isExec ? 'leader'
+        : (isTechStaffUser ? 'technician'
         : ((rStr === 'hr' || tStr.includes('hr') || tStr.includes('مالية') || tStr.includes('حسابات')) ? 'hr'
-        : ((rStr === 'technical' || tStr.includes('فنية') || tStr.includes('فني')) ? 'technical'
-        : (rStr === 'leader' ? 'leader' : 'engineer')));
+        : ((rStr === 'technical' || tStr.includes('فنية') || tStr.includes('إدارة فني') || tStr.includes('ادارة فني')) ? 'technical'
+        : (rStr === 'leader' ? 'leader' : 'engineer'))));
 
       const selectedBtn = window.currentUser?.loginSelectedRole || actualRole;
       if (!isExec) {
@@ -6343,6 +6673,7 @@
         if (selectedBtn === 'hr' && actualRole !== 'hr') return alert('هذا الحساب غير مسجل بالمراجعة المالية HR — اختر بوابتك الصحيحة من الأعلى.');
         if (selectedBtn === 'technical' && actualRole !== 'technical') return alert('هذا الحساب غير مسجل بالإدارة الفنية — اختر بوابتك الصحيحة من الأعلى.');
         if (selectedBtn === 'engineer' && actualRole !== 'engineer') return alert('هذا الحساب غير مسجل كمهندس موقع — اختر بوابتك الصحيحة من الأعلى.');
+        if (selectedBtn === 'technician' && actualRole !== 'technician') return alert('هذا الحساب غير مسجل كفني — اختر بوابتك الصحيحة من الأعلى.');
       }
 
       const basePerms = typeof window.getSysconRoleTemplate === 'function'
@@ -6351,10 +6682,11 @@
       const mergedPerms = Object.assign({}, basePerms, matched.permissions || {});
       const jobTitle = typeof window.getSysconJobTitle === 'function'
         ? window.getSysconJobTitle(em, actualRole, matched.jobTitle)
-        : (matched.jobTitle || (isExec ? 'مدير النظام' : 'تيم ليدر'));
+        : (matched.jobTitle || (isExec ? 'مدير النظام' : (actualRole === 'technician' ? 'فني' : 'تيم ليدر')));
 
       let initView = 'engineer';
-      if (isExec) initView = (selectedBtn === 'hr' ? 'hr' : (selectedBtn === 'technical' ? 'technical' : 'leader'));
+      if (isExec) initView = (selectedBtn === 'hr' ? 'hr' : (selectedBtn === 'technical' ? 'technical' : (selectedBtn === 'technician' ? 'technicians' : 'leader')));
+      else if (actualRole === 'technician') initView = 'technicians';
       else if (actualRole === 'hr') initView = 'hr';
       else if (actualRole === 'technical') initView = 'technical';
       else if (actualRole === 'leader') initView = 'leader';
@@ -6472,12 +6804,126 @@
     return `<span class="px-2.5 py-1 rounded-full text-[10.5px] font-black bg-amber-950 text-amber-300 border border-amber-600">بانتظار التيم ليدر (${esc(s.teamLeader || '-')})</span>`;
   }
 
+  function isTechSheetCheck(s) {
+    return typeof window.isTechnicianClearance === 'function' ? window.isTechnicianClearance(s) : (s?.isTechnicianSheet === true || s?.submittedByRole === 'technician');
+  }
+
+  window.updateTechniciansPendingBadge = function() {
+    const allVis = getVisibleLeaderSheets();
+    const techPend = allVis.filter(s => isTechSheetCheck(s) && String(s.status || 'PENDING').toUpperCase() === 'PENDING').length;
+    const b = document.getElementById('badgeTechniciansPendingCount');
+    if (b) b.innerText = techPend;
+  };
+
+  window.refreshTechniciansFilter = function() {
+    const sel = document.getElementById('techStaffFilterUser');
+    if (!sel) return;
+    const cur = sel.value;
+    const isTechUserFn = typeof window.isTechnicianStaffRole === 'function' ? window.isTechnicianStaffRole : (r => String(r || '').toLowerCase() === 'technician');
+    const techs = [...new Set((window.cachedUsersList || []).filter(u => !u.isSystemConfigDoc && u.isApproved === true && isTechUserFn(u.role, u.jobTitle)).map(u => (u.name || u.fullName || '').trim()).filter(Boolean))];
+    sel.innerHTML = `<option value="ALL">جميع الفنيين (${techs.length})</option>` + techs.map(n => `<option value="${esc(n)}">${esc(n)}</option>`).join('');
+    if ([...sel.options].some(o => o.value === cur)) sel.value = cur;
+    const cntEl = document.getElementById('techStaffStatUsersCount');
+    if (cntEl) cntEl.innerText = techs.length;
+  };
+
+  window.renderTechniciansSectionDashboard = function() {
+    window.refreshTechniciansFilter();
+    const searchQ = (document.getElementById('techStaffFilterSearch')?.value || '').toLowerCase().trim();
+    const stF = (document.getElementById('techStaffFilterStatus')?.value || 'ALL').toUpperCase();
+    const deptF = document.getElementById('techStaffFilterDept')?.value || 'ALL';
+    const userF = (document.getElementById('techStaffFilterUser')?.value || 'ALL').toLowerCase().trim();
+
+    const baseList = getVisibleLeaderSheets().filter(isTechSheetCheck);
+
+    const filtered = baseList.filter(s => {
+      const st = String(s.status || 'PENDING').toUpperCase();
+      if (stF !== 'ALL' && st !== stF) return false;
+      if (deptF !== 'ALL' && s.department !== deptF) return false;
+      if (userF !== 'all') {
+        const sub = String(s.submittedByEngineer || '').toLowerCase().trim();
+        const mem = String(s.teamMembers || '').toLowerCase();
+        if (sub !== userF && !mem.includes(userF)) return false;
+      }
+      if (searchQ) {
+        const hay = `${fmtFullName(s)} ${s.siteName || ''} ${s.region || ''} ${s.department || ''} ${s.submittedByEngineer || ''} ${s.teamLeader || ''}`.toLowerCase();
+        if (!hay.includes(searchQ)) return false;
+      }
+      return true;
+    });
+
+    let tAdv = 0, tExp = 0, pend = 0;
+    filtered.forEach(s => {
+      tAdv += parseFloat(s.advanceAmount) || 0;
+      tExp += (s.items || []).reduce((a, b) => a + (parseFloat(b.amount) || 0), 0);
+      if (String(s.status || 'PENDING').toUpperCase() === 'PENDING') pend++;
+    });
+
+    const setT = (id, v) => { const el = document.getElementById(id); if (el) el.innerText = v; };
+    setT('techStaffStatAdvance', tAdv.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
+    setT('techStaffStatExpenses', tExp.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
+    setT('techStaffStatNet', Math.abs(tAdv - tExp).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
+    setT('techStaffStatPending', pend);
+    setT('badgeTechniciansPendingCount', baseList.filter(s => String(s.status || 'PENDING').toUpperCase() === 'PENDING').length);
+    setT('techStaffTableCountBadge', `${filtered.length} استمارة`);
+
+    const tbody = document.getElementById('techStaffTableBody');
+    const emptyEl = document.getElementById('techStaffTableEmptyState');
+    if (!tbody || !emptyEl) return;
+
+    if (filtered.length === 0) {
+      tbody.innerHTML = '';
+      const p = emptyEl.querySelector('p');
+      if (p) p.textContent = window._sysconClearancesLoaded ? 'لا توجد تصفيات فنيين مطابقة للفلتر الحالي' : 'جاري تحميل البيانات من السحابة...';
+      emptyEl.classList.remove('hidden');
+      return;
+    }
+
+    emptyEl.classList.add('hidden');
+    const canDel = isMasterOrExec() || window.currentUser?.permissions?.canDeleteClearance;
+    const canRej = isMasterOrExec() || window.currentUser?.permissions?.canRejectClearance;
+
+    tbody.innerHTML = filtered.map(s => {
+      const exp = (s.items || []).reduce((a, b) => a + (parseFloat(b.amount) || 0), 0);
+      const adv = parseFloat(s.advanceAmount) || 0;
+      const bal = adv - exp;
+      return `
+        <tr class="hover:bg-slate-800/40 transition">
+          <td class="py-3 px-4">
+            <div class="font-bold text-white font-mono">${esc(fmtFullName(s))}</div>
+            <div class="text-[10px] text-teal-400 font-mono">كود: ${esc(fmtCode(s))} • ${esc(s.region || '-')}</div>
+          </td>
+          <td class="py-3 px-4 text-sky-300 font-bold">
+            ${esc(s.department || '-')}
+            <div class="text-[10px] text-slate-400 font-normal">${esc(s.activityType || '-')} (${calcDays(s)} يوم)</div>
+          </td>
+          <td class="py-3 px-4">
+            <div class="font-bold text-white">${esc(s.submittedByEngineer || '-')} <span class="px-1.5 py-0.5 rounded bg-teal-950 text-teal-300 border border-teal-700 text-[9px] font-black">فني</span></div>
+            <div class="text-[10px] text-amber-300 font-bold">ليدر: ${esc(s.teamLeader || '-')}</div>
+          </td>
+          <td class="py-3 px-4 font-bold text-white font-mono">${adv.toLocaleString()} ج.م</td>
+          <td class="py-3 px-4 font-bold text-sky-400 font-mono">${exp.toLocaleString()} ج.م</td>
+          <td class="py-3 px-4 font-bold font-mono ${bal >= 0 ? 'text-emerald-400' : 'text-rose-400'}">${bal.toLocaleString()} ج.م</td>
+          <td class="py-3 px-4">${stageHtml(s)}</td>
+          <td class="py-3 px-4 text-center">
+            <div class="flex items-center justify-center gap-1.5 flex-wrap">
+              <button type="button" onclick="openClearanceReview('${s.id}', false)" class="sys-btn-sm bg-sky-600 hover:bg-sky-500 text-white">فحص</button>
+              ${canRej ? `<button type="button" onclick="cancelClearanceSheet('${s.id}')" class="sys-btn-sm bg-amber-600 hover:bg-amber-500 text-white">إرجاع</button>` : ''}
+              ${canDel ? `<button type="button" onclick="deleteClearanceSheet('${s.id}')" class="sys-btn-sm bg-rose-700 hover:bg-rose-600 text-white">حذف</button>` : ''}
+            </div>
+          </td>
+        </tr>
+      `;
+    }).join('');
+  };
+
   window.renderLeaderDashboard = function() {
+    window.updateTechniciansPendingBadge();
     const searchQ = (document.getElementById('filterSearch')?.value || '').toLowerCase().trim();
     const stF = (document.getElementById('filterStatus')?.value || 'ALL').toUpperCase();
     const deptF = document.getElementById('filterDepartment')?.value || 'ALL';
     const engF = (document.getElementById('filterEngineer')?.value || 'ALL').toLowerCase().trim();
-    const baseList = getVisibleLeaderSheets();
+    const baseList = getVisibleLeaderSheets().filter(s => !isTechSheetCheck(s));
 
     if (typeof window.renderSysconWeeklyChart === 'function') {
       try { window.renderSysconWeeklyChart(baseList); } catch (e) {}
@@ -6627,7 +7073,7 @@
         <tr class="hover:bg-slate-800/40 ${isReturned ? 'bg-amber-950/15' : ''}">
           <td class="py-3 px-4 font-bold text-white font-mono">${esc(fmtFullName(s))}<div class="text-[10px] text-slate-400">${esc(s.region || '-')}</div></td>
           <td class="py-3 px-4 text-sky-300 font-bold">${esc(s.department || '-')}<div class="text-[10px] text-slate-400 font-normal">${esc(s.activityType || '-')}</div></td>
-          <td class="py-3 px-4"><div class="font-bold text-amber-300">${esc(s.teamLeader || '-')}</div><div class="text-[10px] text-slate-300">${esc(s.submittedByEngineer || '-')}</div></td>
+          <td class="py-3 px-4"><div class="font-bold text-amber-300">${esc(s.teamLeader || '-')}</div><div class="text-[10px] text-slate-300">${esc(s.submittedByEngineer || '-')}${isTechSheetCheck(s) ? ' <span class="px-1 py-0.2 rounded bg-teal-950 text-teal-300 border border-teal-700 text-[9px] font-black">فني</span>' : ''}</div></td>
           <td class="py-3 px-4 max-w-xs">${badges || '-'}</td>
           <td class="py-3 px-4 font-mono text-[11px] text-slate-300">${esc(s.startDate || '-')} ← ${esc(s.endDate || '-')}</td>
           <td class="py-3 px-4">${statusHtml}</td>
