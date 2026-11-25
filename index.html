@@ -861,7 +861,17 @@
             <option value="ALL" selected>جميع المهندسين</option>
           </select>
 
-          <select id="filterStatus" onchange="renderLeaderDashboard()" class="sys-input px-3 py-2">
+          <select id="filterPendingStage" onchange="if(this.value!=='ALL'){const fs=document.getElementById('filterStatus');if(fs)fs.value='ALL';} renderLeaderDashboard();" class="sys-input px-3 py-2 font-bold text-amber-300 border-amber-500/40">
+            <option value="ALL" selected>موقف الاعتماد: الكل</option>
+            <option value="PENDING_LEADER">واقف على التيم ليدر</option>
+            <option value="PENDING_TECHNICAL">واقف على الإدارة الفنية</option>
+            <option value="PENDING_COO">واقف على اعتماد COO</option>
+            <option value="READY_HR">جاهز للطباعة / المالية HR</option>
+            <option value="DELIVERED">مؤرشفة ومُسلّمة للحسابات</option>
+            <option value="REJECTED">مرجعة للتعديل</option>
+          </select>
+
+          <select id="filterStatus" onchange="if(this.value!=='ALL'){const fp=document.getElementById('filterPendingStage');if(fp)fp.value='ALL';} renderLeaderDashboard();" class="sys-input px-3 py-2">
             <option value="ALL" selected>جميع الحالات</option>
             <option value="PENDING">قيد المراجعة</option>
             <option value="APPROVED">معتمدة</option>
@@ -1017,7 +1027,17 @@
             <option value="ALL" selected>جميع الفنيين</option>
           </select>
 
-          <select id="techStaffFilterStatus" onchange="renderTechniciansSectionDashboard()" class="sys-input px-3 py-2">
+          <select id="techStaffFilterPendingStage" onchange="if(this.value!=='ALL'){const fs=document.getElementById('techStaffFilterStatus');if(fs)fs.value='ALL';} renderTechniciansSectionDashboard();" class="sys-input px-3 py-2 font-bold text-amber-300 border-amber-500/40">
+            <option value="ALL" selected>موقف الاعتماد: الكل</option>
+            <option value="PENDING_LEADER">واقف على التيم ليدر</option>
+            <option value="PENDING_TECHNICAL">واقف على الإدارة الفنية</option>
+            <option value="PENDING_COO">واقف على اعتماد COO</option>
+            <option value="READY_HR">جاهز للطباعة / المالية HR</option>
+            <option value="DELIVERED">مؤرشفة ومُسلّمة للحسابات</option>
+            <option value="REJECTED">مرجعة للتعديل</option>
+          </select>
+
+          <select id="techStaffFilterStatus" onchange="if(this.value!=='ALL'){const fp=document.getElementById('techStaffFilterPendingStage');if(fp)fp.value='ALL';} renderTechniciansSectionDashboard();" class="sys-input px-3 py-2">
             <option value="ALL" selected>جميع الحالات</option>
             <option value="PENDING">قيد المراجعة</option>
             <option value="APPROVED">معتمدة</option>
@@ -2766,6 +2786,20 @@
       return true;
     }
 
+    function getClearanceStageKey(s) {
+      if (!s) return 'PENDING_LEADER';
+      const st = String(s.status || '').toUpperCase().trim();
+      if (st === 'REJECTED' || s.isRejected === true) return 'REJECTED';
+      if (s.deliveredToAccounts === true || s.hrConfirmed === true) return 'DELIVERED';
+      const cooOk = (s.cooApproved === true || s.isCooApproved === true);
+      if (isLeaderSelfClearance(s)) return cooOk ? 'READY_HR' : 'PENDING_COO';
+      const ldrOk = st === 'APPROVED' || s.isApproved === true || Boolean(s.signatureData);
+      if (ldrOk && s.technicalApproved === true && cooOk) return 'READY_HR';
+      if (ldrOk && s.technicalApproved === true) return 'PENDING_COO';
+      if (ldrOk) return 'PENDING_TECHNICAL';
+      return 'PENDING_LEADER';
+    }
+
     function getStageBadge(s) {
       if (!s) return '-';
       const st = String(s.status || '').toUpperCase().trim();
@@ -3604,6 +3638,7 @@
     window.renderLeaderDashboard = function() {
       const searchQ = (document.getElementById('filterSearch')?.value || '').toLowerCase().trim();
       const stF = (document.getElementById('filterStatus')?.value || 'ALL').toUpperCase();
+      const stageF = (document.getElementById('filterPendingStage')?.value || 'ALL').toUpperCase();
       const deptF = document.getElementById('filterDepartment')?.value || 'ALL';
       const engF = (document.getElementById('filterEngineer')?.value || 'ALL').toLowerCase().trim();
       const fromV = document.getElementById('leaderDateFrom')?.value || '';
@@ -3616,6 +3651,7 @@
         if (!withinDateRange(s, fromV, toV)) return false;
         const st = String(s.status || 'PENDING').toUpperCase();
         if (stF !== 'ALL' && st !== stF) return false;
+        if (stageF !== 'ALL' && getClearanceStageKey(s) !== stageF) return false;
         if (deptF !== 'ALL' && s.department !== deptF) return false;
         if (engF !== 'all') {
           const sub = String(s.submittedByEngineer || '').toLowerCase().trim();
@@ -6936,6 +6972,50 @@
     });
   }
 
+  function getStageKey(s) {
+    if (!s) return 'PENDING_LEADER';
+    const st = String(s.status || '').toUpperCase().trim();
+    if (st === 'REJECTED' || s.isRejected === true) return 'REJECTED';
+    if (s.deliveredToAccounts === true || s.hrConfirmed === true) return 'DELIVERED';
+    const cooOk = (s.cooApproved === true || s.isCooApproved === true);
+    if (isLeaderSelf(s)) return cooOk ? 'READY_HR' : 'PENDING_COO';
+    const ldrOk = st === 'APPROVED' || s.isApproved === true || Boolean(s.signatureData);
+    if (ldrOk && s.technicalApproved === true && cooOk) return 'READY_HR';
+    if (ldrOk && s.technicalApproved === true) return 'PENDING_COO';
+    if (ldrOk) return 'PENDING_TECHNICAL';
+    return 'PENDING_LEADER';
+  }
+
+  function updateStageDropdownCounts(selectId, list) {
+    const sel = document.getElementById(selectId);
+    if (!sel) return;
+    const counts = {
+      ALL: list.length,
+      PENDING_LEADER: 0,
+      PENDING_TECHNICAL: 0,
+      PENDING_COO: 0,
+      READY_HR: 0,
+      DELIVERED: 0,
+      REJECTED: 0
+    };
+    list.forEach(s => {
+      const k = getStageKey(s);
+      if (counts[k] !== undefined) counts[k]++;
+    });
+    const labels = {
+      ALL: `موقف الاعتماد: الكل (${counts.ALL})`,
+      PENDING_LEADER: `واقف على التيم ليدر (${counts.PENDING_LEADER})`,
+      PENDING_TECHNICAL: `واقف على الإدارة الفنية (${counts.PENDING_TECHNICAL})`,
+      PENDING_COO: `واقف على اعتماد COO (${counts.PENDING_COO})`,
+      READY_HR: `جاهز للطباعة / المالية HR (${counts.READY_HR})`,
+      DELIVERED: `مؤرشفة ومُسلّمة للحسابات (${counts.DELIVERED})`,
+      REJECTED: `مرجعة للتعديل (${counts.REJECTED})`
+    };
+    [...sel.options].forEach(opt => {
+      if (labels[opt.value]) opt.textContent = labels[opt.value];
+    });
+  }
+
   function stageHtml(s) {
     const st = String(s.status || '').toUpperCase().trim();
     if (st === 'REJECTED' || s.isRejected) {
@@ -6982,14 +7062,17 @@
     window.refreshTechniciansFilter();
     const searchQ = (document.getElementById('techStaffFilterSearch')?.value || '').toLowerCase().trim();
     const stF = (document.getElementById('techStaffFilterStatus')?.value || 'ALL').toUpperCase();
+    const stageF = (document.getElementById('techStaffFilterPendingStage')?.value || 'ALL').toUpperCase();
     const deptF = document.getElementById('techStaffFilterDept')?.value || 'ALL';
     const userF = (document.getElementById('techStaffFilterUser')?.value || 'ALL').toLowerCase().trim();
 
     const baseList = getVisibleLeaderSheets().filter(isTechSheetCheck);
+    updateStageDropdownCounts('techStaffFilterPendingStage', baseList);
 
     const filtered = baseList.filter(s => {
       const st = String(s.status || 'PENDING').toUpperCase();
       if (stF !== 'ALL' && st !== stF) return false;
+      if (stageF !== 'ALL' && getStageKey(s) !== stageF) return false;
       if (deptF !== 'ALL' && s.department !== deptF) return false;
       if (userF !== 'all') {
         const sub = String(s.submittedByEngineer || '').toLowerCase().trim();
@@ -7072,9 +7155,11 @@
     window.updateTechniciansPendingBadge();
     const searchQ = (document.getElementById('filterSearch')?.value || '').toLowerCase().trim();
     const stF = (document.getElementById('filterStatus')?.value || 'ALL').toUpperCase();
+    const stageF = (document.getElementById('filterPendingStage')?.value || 'ALL').toUpperCase();
     const deptF = document.getElementById('filterDepartment')?.value || 'ALL';
     const engF = (document.getElementById('filterEngineer')?.value || 'ALL').toLowerCase().trim();
     const baseList = getVisibleLeaderSheets().filter(s => !isTechSheetCheck(s));
+    updateStageDropdownCounts('filterPendingStage', baseList);
 
     if (typeof window.renderSysconWeeklyChart === 'function') {
       try { window.renderSysconWeeklyChart(baseList); } catch (e) {}
@@ -7083,6 +7168,7 @@
     const filtered = baseList.filter(s => {
       const st = String(s.status || 'PENDING').toUpperCase();
       if (stF !== 'ALL' && st !== stF) return false;
+      if (stageF !== 'ALL' && getStageKey(s) !== stageF) return false;
       if (deptF !== 'ALL' && s.department !== deptF) return false;
       if (engF !== 'all') {
         const sub = String(s.submittedByEngineer || '').toLowerCase().trim();
