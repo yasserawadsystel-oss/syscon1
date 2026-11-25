@@ -1571,6 +1571,8 @@
 
     <!-- 4. بوابة المراجعة المالية والحسابات (HR) -->
     <div id="viewHr" class="hidden space-y-5">
+      <div id="simplePrintOfficerPanel" class="hidden space-y-5"></div>
+      <div id="standardHrDashboardWrapper" class="space-y-5">
       <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
         <div class="sys-card p-4">
           <div class="flex items-center justify-between text-slate-400 mb-1">
@@ -1669,6 +1671,7 @@
           </table>
         </div>
         <div id="hrTableEmptyState" class="hidden py-12 text-center text-slate-500 text-xs font-bold">لا توجد تصفيات مطابقة.</div>
+      </div>
       </div>
     </div>
 <!-- 5. لوحة مؤشرات الأداء، الخامات السرية (BOM)، تباين المواقع، والجرد الشهري -->
@@ -2233,6 +2236,7 @@
 
     // 1. الثوابت والتهيئة
     const MASTER_ADMIN_EMAILS = ["yasser.awad.systel@gmail.com", "yasser.awad.systel@gmail.co"];
+    const SIMPLE_PRINT_OFFICER_EMAILS = ["aymanelhalawany77@gmail.com"];
     const EXECUTIVE_PROFILES = {
       "yasser.awad.systel@gmail.com": { jobTitle: "مدير النظام", badgeLabel: "مدير النظام" },
       "yasser.awad.systel@gmail.co": { jobTitle: "مدير النظام", badgeLabel: "مدير النظام" },
@@ -2455,6 +2459,11 @@
 
     function isExecutiveProfile(email) {
       return !!EXECUTIVE_PROFILES[String(email || '').toLowerCase().trim()];
+    }
+
+    function isSimplePrintOfficer(email) {
+      const em = String(email || window.currentUser?.email || '').toLowerCase().trim();
+      return SIMPLE_PRINT_OFFICER_EMAILS.includes(em);
     }
 
     function isTopManagement() {
@@ -3374,25 +3383,29 @@
     // 4. الصلاحيات والتنقل بين البوابات
     function applyRoleUI() {
       const isMaster = isMasterAdmin(window.currentUser.email);
+      const isPrintOnly = isSimplePrintOfficer(window.currentUser.email);
       const show = (el, ok, disp = 'inline-flex') => {
         if (!el) return;
         el.classList.toggle('hidden', !ok);
         el.style.setProperty('display', ok ? disp : 'none', 'important');
       };
 
-      show(document.getElementById('btnAdminPermissionsModal'), isMaster || hasPerm('canManageUsers'));
-      show(document.getElementById('btnMasterMaintToggle'), isMaster || hasPerm('canToggleMaintenance'));
-      show(document.getElementById('btnSysBackupJson'), isMaster || hasPerm('canBackupSystem'));
-      show(document.getElementById('btnHeaderEngineerWallet'), isMaster || hasPerm('canViewEngineerWallet'));
+      show(document.getElementById('btnAdminPermissionsModal'), !isPrintOnly && (isMaster || hasPerm('canManageUsers')));
+      show(document.getElementById('btnMasterMaintToggle'), !isPrintOnly && (isMaster || hasPerm('canToggleMaintenance')));
+      show(document.getElementById('btnSysBackupJson'), !isPrintOnly && (isMaster || hasPerm('canBackupSystem')));
+      show(document.getElementById('btnHeaderEngineerWallet'), !isPrintOnly && (isMaster || hasPerm('canViewEngineerWallet')));
 
       const isTechStaff = isTechnicianStaffRole(window.currentUser.role, window.currentUser.jobTitle);
-      const allowLead = isMaster || hasPerm('canViewLeaderDashboard');
-      const allowTechnicians = isMaster || isTechStaff || hasPerm('canViewTechniciansSection');
-      const allowTech = isMaster || hasPerm('canViewTechnicalDashboard');
-      const allowHr = isMaster || hasPerm('canViewHrDashboard');
-      const allowKpi = isMaster || hasPerm('canViewLeadersKpi');
-      const allowMp = isMaster || hasPerm('canViewManpower');
-      const allowEng = !isTechStaff ? (isMaster || hasPerm('canUseEngineerForm')) : false;
+      const allowLead = !isPrintOnly && (isMaster || hasPerm('canViewLeaderDashboard'));
+      const allowTechnicians = !isPrintOnly && (isMaster || isTechStaff || hasPerm('canViewTechniciansSection'));
+      const allowTech = !isPrintOnly && (isMaster || hasPerm('canViewTechnicalDashboard'));
+      const allowHr = isPrintOnly || isMaster || hasPerm('canViewHrDashboard');
+      const allowKpi = !isPrintOnly && (isMaster || hasPerm('canViewLeadersKpi'));
+      const allowMp = !isPrintOnly && (isMaster || hasPerm('canViewManpower'));
+      const allowEng = (!isPrintOnly && !isTechStaff) ? (isMaster || hasPerm('canUseEngineerForm')) : false;
+
+      const mobNav = document.getElementById('sysconMobileBottomNav');
+      if (mobNav) mobNav.classList.toggle('hidden', isPrintOnly);
 
       show(document.getElementById('btnSwitchLeader'), allowLead);
       show(document.getElementById('btnSwitchTechnicians'), allowTechnicians);
@@ -3452,16 +3465,18 @@
 
     window.setAppMode = function(mode) {
       const isMaster = isMasterAdmin(window.currentUser.email);
+      const isPrintOnly = isSimplePrintOfficer(window.currentUser.email);
       const isTechStaff = isTechnicianStaffRole(window.currentUser.role, window.currentUser.jobTitle);
       const isPlainTech = isTechStaff && !isMaster && !hasPerm('canViewLeaderDashboard');
 
-      if (isPlainTech && mode === 'engineer') mode = 'technicians';
+      if (isPrintOnly) mode = 'hr';
+      else if (isPlainTech && mode === 'engineer') mode = 'technicians';
 
       const permMap = {
         leader: isMaster || hasPerm('canViewLeaderDashboard'),
         technicians: isMaster || isTechStaff || hasPerm('canViewTechniciansSection'),
         technical: isMaster || hasPerm('canViewTechnicalDashboard'),
-        hr: isMaster || hasPerm('canViewHrDashboard'),
+        hr: isPrintOnly || isMaster || hasPerm('canViewHrDashboard'),
         kpi: isMaster || hasPerm('canViewLeadersKpi'),
         manpower: isMaster || hasPerm('canViewManpower'),
         engineer: !isPlainTech && (isMaster || hasPerm('canUseEngineerForm'))
@@ -4444,6 +4459,21 @@
     };
 
     window.renderHrDashboard = function() {
+      const isPrintOnly = isSimplePrintOfficer(window.currentUser?.email);
+      const stdWrap = document.getElementById('standardHrDashboardWrapper');
+      const simpleWrap = document.getElementById('simplePrintOfficerPanel');
+      if (stdWrap && simpleWrap) {
+        stdWrap.classList.toggle('hidden', isPrintOnly);
+        simpleWrap.classList.toggle('hidden', !isPrintOnly);
+      }
+      if (isPrintOnly && typeof window.renderSimplePrintOfficerDashboard === 'function') {
+        const readyCnt = window.cachedClearancesList.filter(s => isReadyForFinance(s) && !s.deliveredToAccounts && !s.hrConfirmed).length;
+        const bHr = document.getElementById('badgeHrPendingCount');
+        if (bHr) bHr.innerText = readyCnt;
+        window.renderSimplePrintOfficerDashboard();
+        return;
+      }
+
       const q = (document.getElementById('hrFilterSearch')?.value || '').toLowerCase().trim();
       const deptF = document.getElementById('hrFilterDept')?.value || 'ALL';
 
@@ -6318,9 +6348,16 @@
         window.handleLogout();
         return;
       }
-      const _meRoleKey = isMasterAdmin(me.email) ? 'admin' : (isTechnicianStaffRole(me.role, me.jobTitle) ? 'technician' : me.role);
+      const _meRoleKey = isMasterAdmin(me.email) ? 'admin' : (isSimplePrintOfficer(me.email) ? 'hr' : (isTechnicianStaffRole(me.role, me.jobTitle) ? 'technician' : me.role));
       window.currentUser.permissions = Object.assign({}, getRoleTemplate(_meRoleKey), me.permissions || {});
-      window.currentUser.jobTitle = getJobTitle(me.email, me.role, me.jobTitle);
+      if (isSimplePrintOfficer(me.email)) {
+        window.currentUser.permissions.canViewHrDashboard = true;
+        window.currentUser.permissions.canConfirmHrClearance = true;
+        window.currentUser.permissions.canPrintPdf = true;
+        window.currentUser.permissions.canSeeAllClearances = true;
+        window.currentUser.activeViewMode = 'hr';
+      }
+      window.currentUser.jobTitle = isSimplePrintOfficer(me.email) ? 'مسؤول الطباعة والتسليم' : getJobTitle(me.email, me.role, me.jobTitle);
       document.getElementById('headerUserRole').textContent = window.currentUser.jobTitle;
       saveSession();
       applyRoleUI();
@@ -6449,6 +6486,12 @@
     window.isUpSheet = isUpSheet;
     window.isTechnicianStaffRole = isTechnicianStaffRole;
     window.isTechnicianClearance = isTechnicianClearance;
+    window.isSimplePrintOfficer = isSimplePrintOfficer;
+    window.isSysconReadyForFinance = isReadyForFinance;
+    window.getSysconFullDisplayName = getFullDisplayName;
+    window.getSysconFormattedCode = getFormattedCode;
+    window.sendSysconNotif = sendNotif;
+    window.logSysconAudit = logAudit;
     window.calculateEngineerTotals = calcEngTotals;
     window.saveEngineerFormDraft = saveDraft;
     window.hashSysconPassword = hashPassword;
@@ -6721,6 +6764,7 @@
 
       const em = String(matched.email || '').toLowerCase().trim();
       const isExec = EXEC_EMAILS.includes(em);
+      const isPrintOfficer = typeof window.isSimplePrintOfficer === 'function' && window.isSimplePrintOfficer(em);
       if (!isExec && matched.isApproved !== true) {
         return alert('الحساب بانتظار موافقة وتفعيل الإدارة.');
       }
@@ -6735,13 +6779,14 @@
         ? window.isTechnicianStaffRole(matched.role, matched.jobTitle)
         : (rStr === 'technician');
       const actualRole = isExec ? 'leader'
+        : (isPrintOfficer ? 'hr'
         : (isTechStaffUser ? 'technician'
         : ((rStr === 'hr' || tStr.includes('hr') || tStr.includes('مالية') || tStr.includes('حسابات')) ? 'hr'
         : ((rStr === 'technical' || tStr.includes('فنية') || tStr.includes('إدارة فني') || tStr.includes('ادارة فني')) ? 'technical'
-        : (rStr === 'leader' ? 'leader' : 'engineer'))));
+        : (rStr === 'leader' ? 'leader' : 'engineer')))));
 
       const selectedBtn = window.currentUser?.loginSelectedRole || actualRole;
-      if (!isExec) {
+      if (!isExec && !isPrintOfficer) {
         if (selectedBtn === 'leader' && actualRole !== 'leader') return alert('هذا الحساب غير مسجل كتيم ليدر — اختر بوابتك الصحيحة من الأعلى.');
         if (selectedBtn === 'hr' && actualRole !== 'hr') return alert('هذا الحساب غير مسجل بالمراجعة المالية HR — اختر بوابتك الصحيحة من الأعلى.');
         if (selectedBtn === 'technical' && actualRole !== 'technical') return alert('هذا الحساب غير مسجل بالإدارة الفنية — اختر بوابتك الصحيحة من الأعلى.');
@@ -6753,12 +6798,21 @@
         ? window.getSysconRoleTemplate(isExec ? 'admin' : actualRole)
         : {};
       const mergedPerms = Object.assign({}, basePerms, matched.permissions || {});
-      const jobTitle = typeof window.getSysconJobTitle === 'function'
-        ? window.getSysconJobTitle(em, actualRole, matched.jobTitle)
-        : (matched.jobTitle || (isExec ? 'مدير النظام' : (actualRole === 'technician' ? 'فني' : 'تيم ليدر')));
+      if (isPrintOfficer) {
+        mergedPerms.canViewHrDashboard = true;
+        mergedPerms.canConfirmHrClearance = true;
+        mergedPerms.canPrintPdf = true;
+        mergedPerms.canSeeAllClearances = true;
+      }
+      const jobTitle = isPrintOfficer
+        ? 'مسؤول الطباعة والتسليم'
+        : (typeof window.getSysconJobTitle === 'function'
+            ? window.getSysconJobTitle(em, actualRole, matched.jobTitle)
+            : (matched.jobTitle || (isExec ? 'مدير النظام' : (actualRole === 'technician' ? 'فني' : 'تيم ليدر'))));
 
       let initView = 'engineer';
-      if (isExec) initView = (selectedBtn === 'hr' ? 'hr' : (selectedBtn === 'technical' ? 'technical' : (selectedBtn === 'technician' ? 'technicians' : 'leader')));
+      if (isPrintOfficer) initView = 'hr';
+      else if (isExec) initView = (selectedBtn === 'hr' ? 'hr' : (selectedBtn === 'technical' ? 'technical' : (selectedBtn === 'technician' ? 'technicians' : 'leader')));
       else if (actualRole === 'technician') initView = 'technicians';
       else if (actualRole === 'hr') initView = 'hr';
       else if (actualRole === 'technical') initView = 'technical';
@@ -7738,21 +7792,24 @@
 <script>
 (function bindAbsoluteOfficialPrint() {
   const origDocTitle = document.title;
+  window._sysconCustomPrintMode = null;
 
   function getSheetTitleName() {
     const s = window.currentReviewItem;
-    const site = String(s?.siteName || document.getElementById('m_siteName')?.textContent || '').trim();
-    const code = String(s?.sheetNumber || document.getElementById('m_sheetNumber')?.textContent || '').trim().toUpperCase();
+    const site = String(s?.siteName || document.getElementById('m_siteName')?.value || document.getElementById('m_siteName')?.textContent || '').trim();
+    const code = String(s?.sheetNumber || document.getElementById('m_sheetCodeTop')?.textContent || '').trim().toUpperCase();
     const name = String(s?.clearanceName || (site && code ? `${site} - ${code}` : (site || code || 'تصفية_سيستل'))).trim();
     return name.replace(/[\\\/:*?"<>|]/g, '_');
   }
 
-  function renderCleanOfficialSheet() {
+  function renderCleanOfficialSheet(bannerCfg) {
+    if (window._sysconCustomPrintMode === 'HANDOVER') return true;
+
     const oldHost = document.getElementById('sysconOfficialPrintHost');
     if (oldHost) oldHost.remove();
 
-    const wrapper = document.getElementById('sheetScrollWrapper');
-    if (!wrapper) return false;
+    const sheetEl = document.getElementById('printableSheet');
+    if (!sheetEl) return false;
 
     document.title = getSheetTitleName();
 
@@ -7760,28 +7817,40 @@
     host.id = 'sysconOfficialPrintHost';
     host.style.cssText = 'display:flex; justify-content:center; align-items:flex-start; width:100%; margin:0; padding:0; background:#ffffff;';
 
-    const clone = wrapper.cloneNode(true);
-    clone.querySelectorAll('[id]').forEach(el => el.removeAttribute('id'));
-    clone.querySelectorAll('button, .no-print, [data-no-print="true"]').forEach(el => el.remove());
+    const card = sheetEl.cloneNode(true);
+    const origInps = sheetEl.querySelectorAll('input');
+    const cloneInps = card.querySelectorAll('input');
+    origInps.forEach((inp, idx) => {
+      if (cloneInps[idx]) {
+        const sp = document.createElement('div');
+        sp.textContent = inp.value || '';
+        sp.style.cssText = 'display:block;width:100%;font-weight:800;color:#000;text-align:center;font-family:"Cairo",Tahoma,Arial,sans-serif;font-size:11px;';
+        cloneInps[idx].parentNode.replaceChild(sp, cloneInps[idx]);
+      }
+    });
 
-    // إزالة خلفية وهوامش الحاوية الرمادية الخارجية للإبقاء على كارت الاستمارة النظيف فقط
-    clone.style.cssText = 'display:flex !important; justify-content:center !important; align-items:flex-start !important; width:100% !important; max-width:none !important; height:auto !important; overflow:visible !important; margin:0 !important; padding:0 !important; background:transparent !important; transform:none !important; zoom:1 !important;';
+    card.querySelectorAll('[id]').forEach(el => el.removeAttribute('id'));
+    card.querySelectorAll('button, .no-print, [data-no-print="true"]').forEach(el => el.remove());
 
-    const card = clone.firstElementChild || clone;
-    card.style.margin = '0';
-    card.style.transform = 'none';
-    card.style.zoom = '1';
+    card.style.cssText = 'width:980px !important; min-width:980px !important; max-width:980px !important; margin:0 !important; padding:10px 14px !important; background:#ffffff !important; color:#000000 !important; direction:rtl !important; transform:none !important; zoom:1 !important; border:1.5px solid #0f172a !important; border-radius:8px !important; box-sizing:border-box !important;';
 
-    host.appendChild(clone);
+    if (bannerCfg && bannerCfg.text) {
+      const banner = document.createElement('div');
+      banner.style.cssText = bannerCfg.isReprint
+        ? 'background:#fee2e2;color:#991b1b;border:2px dashed #dc2626;padding:4px 10px;border-radius:6px;font-size:11.5px;font-weight:900;text-align:center;margin-bottom:6px;direction:rtl;'
+        : 'background:#ecfdf5;color:#065f46;border:1.5px solid #059669;padding:4px 10px;border-radius:6px;font-size:10.5px;font-weight:900;text-align:center;margin-bottom:6px;direction:rtl;';
+      banner.textContent = bannerCfg.text;
+      card.prepend(banner);
+    }
+
+    host.appendChild(card);
     document.body.appendChild(host);
 
-    // القياس الفعلي لكارت الاستمارة ومطابقته مع أبعاد A4 Landscape بالبكسل (287mm × 200mm)
-    const cardW = card.scrollWidth || card.offsetWidth || 1040;
-    const cardH = card.scrollHeight || card.offsetHeight || 460;
-    const printableW = 1076; // 287mm at 96dpi مع هامش أمان
-    const printableH = 746;  // 200mm at 96dpi مع هامش أمان
+    const cardW = card.scrollWidth || card.offsetWidth || 980;
+    const cardH = card.scrollHeight || card.offsetHeight || 480;
+    const printableW = 1076;
+    const printableH = 746;
     const exactZoom = Math.min(printableW / cardW, printableH / cardH);
-
     card.style.zoom = exactZoom.toFixed(4);
     return true;
   }
@@ -7789,24 +7858,67 @@
   function cleanupOfficialSheet() {
     const oldHost = document.getElementById('sysconOfficialPrintHost');
     if (oldHost) oldHost.remove();
+    window._sysconCustomPrintMode = null;
     setTimeout(() => { document.title = origDocTitle; }, 600);
+    if (typeof window._sysconAfterPrintCallback === 'function') {
+      const cb = window._sysconAfterPrintCallback;
+      window._sysconAfterPrintCallback = null;
+      setTimeout(cb, 150);
+    }
   }
 
-  window.addEventListener('beforeprint', renderCleanOfficialSheet);
+  window.addEventListener('beforeprint', () => {
+    if (window._sysconCustomPrintMode === 'HANDOVER') return;
+    if (!document.getElementById('sysconOfficialPrintHost')) {
+      renderCleanOfficialSheet(window._sysconPendingPrintBanner || null);
+    }
+  });
   window.addEventListener('afterprint', cleanupOfficialSheet);
 
-  const runCleanPrint = function() {
-    renderCleanOfficialSheet();
-    setTimeout(() => window.print(), 80);
+  const runCleanPrint = function(bannerCfg) {
+    window._sysconCustomPrintMode = null;
+    window._sysconPendingPrintBanner = bannerCfg || null;
+    renderCleanOfficialSheet(bannerCfg || null);
+    setTimeout(() => {
+      window.print();
+      window._sysconPendingPrintBanner = null;
+    }, 100);
   };
 
-  window.printOfficialClearanceSheet = runCleanPrint;
-  window.downloadSheetPDF = runCleanPrint;
+  window.sysconRunCleanPrintWithBanner = runCleanPrint;
+  window.printOfficialClearanceSheet = function() {
+    const s = window.currentReviewItem;
+    const prevCnt = parseInt(s?.printCount || 0, 10);
+    const nextCnt = prevCnt + 1;
+    const isReprint = prevCnt >= 1;
+    const userName = window.currentUser?.name || 'المستخدم';
+    const now = new Date();
+    const timeStr = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')} - ${now.toLocaleDateString('en-GB')}`;
+    if (s && s.id && typeof db !== 'undefined') {
+      const firstBy = s.firstPrintedBy || userName;
+      const firstAt = s.firstPrintedAtStr || timeStr;
+      s.printCount = nextCnt; s.firstPrintedBy = firstBy; s.firstPrintedAtStr = firstAt;
+      s.lastPrintedBy = userName; s.lastPrintedAtStr = timeStr;
+      db.collection('clearance_sheets').doc(s.id).update({
+        isPrinted: true, printCount: nextCnt, firstPrintedBy: firstBy,
+        firstPrintedAtStr: firstAt, lastPrintedBy: userName, lastPrintedAtStr: timeStr
+      }).catch(() => {});
+    }
+    const banner = s ? {
+      isReprint,
+      text: isReprint
+        ? `⚠️ نسخة مكررة رقم ${nextCnt} • طبعت بواسطة: ${userName} (${timeStr}) • الأصل: ${s.firstPrintedBy || '-'}`
+        : `نسخة أصلية رقم 1 • طبعت بواسطة: ${userName} (${timeStr})`
+    } : null;
+    runCleanPrint(banner);
+  };
+  window.downloadSheetPDF = window.printOfficialClearanceSheet;
 
-  // زر "طباعة وتسليم" في الإدارة المالية HR
+  // زر "طباعة وتسليم" في الإدارة المالية HR (لباقي حسابات الـ HR بعد تصليح openClearanceReview)
   document.addEventListener('click', async function(e) {
     const btn = e.target.closest('button');
     if (!btn) return;
+    if (btn.closest('#simplePrintOfficerPanel')) return;
     const txt = (btn.textContent || '').trim();
     if (txt.includes('طباعة وتسليم') || txt.includes('طباعة وتأكيد')) {
       const onclickAttr = btn.getAttribute('onclick') || '';
@@ -7817,23 +7929,626 @@
       e.preventDefault();
       e.stopImmediatePropagation();
 
+      const now = new Date();
+      const timeStr = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')} - ${now.toLocaleDateString('en-GB')}`;
+      const officer = window.currentUser?.name || 'المراجعة المالية HR';
+
       if (typeof db !== 'undefined') {
         await db.collection('clearance_sheets').doc(targetId).update({
           deliveredToAccounts: true,
+          deliveredToAccountsBy: officer,
+          deliveredToAccountsAt: timeStr,
+          deliveredToAccountsTimestamp: Date.now(),
           hrConfirmed: true,
-          hrConfirmedBy: window.currentUser?.name || 'المراجعة المالية HR',
-          hrConfirmedAt: new Date().toLocaleString('ar-EG'),
-          status: 'مؤرشفة ومُسلمة للحسابات'
+          hrArchived: true,
+          hrConfirmedBy: officer,
+          hrConfirmedDate: timeStr,
+          hrConfirmedAt: Date.now()
         }).catch(() => {});
       }
 
-      if (typeof window.openReviewModal === 'function') {
-        window.openReviewModal(targetId);
+      if (typeof window.openClearanceReview === 'function') {
+        window.openClearanceReview(targetId, true);
       }
 
-      setTimeout(runCleanPrint, 300);
+      setTimeout(() => window.printOfficialClearanceSheet(), 320);
     }
   }, true);
+})();
+</script>
+
+<script>
+(function initSimplePrintOfficerModule() {
+  "use strict";
+
+  let simpleTab = 'READY'; // 'READY' | 'DELIVERED'
+  let simpleSearch = '';
+
+  function esc(s) {
+    if (s === null || s === undefined) return '';
+    return String(s)
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+  }
+
+  function fmtName(s) {
+    if (typeof window.getSysconFullDisplayName === 'function') return window.getSysconFullDisplayName(s);
+    return `${s?.siteName || '-'} - ${s?.sheetNumber || 'SYS-0000'}`;
+  }
+
+  function fmtCode(s) {
+    if (typeof window.getSysconFormattedCode === 'function') return window.getSysconFormattedCode(s);
+    return s?.sheetNumber || 'SYS-0000';
+  }
+
+  function calcExp(s) {
+    return (s?.items || []).reduce((a, b) => a + (parseFloat(b.amount) || 0), 0);
+  }
+
+  function getReadyForFinanceAll() {
+    const all = Array.isArray(window.cachedClearancesList) ? window.cachedClearancesList : [];
+    const fn = window.isSysconReadyForFinance;
+    if (typeof fn === 'function') return all.filter(fn);
+    return all.filter(s => s && (s.cooApproved === true || s.isCooApproved === true));
+  }
+
+  function nowDateTimeStr() {
+    const now = new Date();
+    return `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')} - ${now.toLocaleDateString('en-GB')}`;
+  }
+
+  function genBatchCode() {
+    const d = new Date();
+    const yy = String(d.getFullYear()).slice(-2);
+    const mm = String(d.getMonth() + 1).padStart(2, '0');
+    const dd = String(d.getDate()).padStart(2, '0');
+    const hh = String(d.getHours()).padStart(2, '0');
+    const mi = String(d.getMinutes()).padStart(2, '0');
+    const rnd = Math.floor(10 + Math.random() * 89);
+    return `HND-${yy}${mm}${dd}-${hh}${mi}-${rnd}`;
+  }
+
+  window.setSimplePrintTab = function(tab) {
+    simpleTab = tab;
+    window.renderSimplePrintOfficerDashboard();
+  };
+
+  window.setSimplePrintSearch = function(val) {
+    simpleSearch = val || '';
+    window.renderSimplePrintOfficerDashboard();
+  };
+
+  window.renderSimplePrintOfficerDashboard = function() {
+    const panel = document.getElementById('simplePrintOfficerPanel');
+    if (!panel) return;
+
+    const allReady = getReadyForFinanceAll();
+    const toPrintList = allReady.filter(s => !s.deliveredToAccounts && !s.hrConfirmed && s.printedReadyForHandover !== true);
+    const basketList = allReady.filter(s => !s.deliveredToAccounts && !s.hrConfirmed && s.printedReadyForHandover === true);
+    const deliveredList = allReady.filter(s => s.deliveredToAccounts === true || s.hrConfirmed === true);
+
+    const basketTotalExp = basketList.reduce((sum, s) => sum + calcExp(s), 0);
+
+    const q = simpleSearch.toLowerCase().trim();
+    const filterFn = s => {
+      if (!q) return true;
+      const hay = `${fmtName(s)} ${s.siteName || ''} ${s.department || ''} ${s.submittedByEngineer || ''} ${s.teamLeader || ''} ${s.handoverBatchCode || ''}`.toLowerCase();
+      return hay.includes(q);
+    };
+
+    const filteredToPrint = toPrintList.filter(filterFn);
+    const filteredDelivered = deliveredList.filter(filterFn);
+
+    // تجميع الحوافظ السابقة لإعادة الطباعة بضغطة واحدة
+    const pastBatchesMap = {};
+    deliveredList.forEach(s => {
+      if (s.handoverBatchCode) {
+        if (!pastBatchesMap[s.handoverBatchCode]) {
+          pastBatchesMap[s.handoverBatchCode] = {
+            code: s.handoverBatchCode,
+            date: s.deliveredToAccountsAt || s.hrConfirmedDate || '-',
+            by: s.deliveredToAccountsBy || s.hrConfirmedBy || '-',
+            items: []
+          };
+        }
+        pastBatchesMap[s.handoverBatchCode].items.push(s);
+      }
+    });
+    const pastBatches = Object.values(pastBatchesMap).slice(0, 8);
+
+    const basketHtml = basketList.length > 0 ? `
+      <div class="sys-card border-2 border-emerald-500/70 bg-emerald-950/20 p-5 space-y-4">
+        <div class="flex flex-wrap items-center justify-between gap-3">
+          <div class="space-y-1">
+            <div class="flex items-center gap-2">
+              <span class="px-3 py-1 rounded-full bg-emerald-500 text-slate-950 font-black text-xs">جاهز للتسليم للحسابات</span>
+              <span class="text-base sm:text-lg font-black text-white">${basketList.length} تصفية مطبوعة</span>
+            </div>
+            <div class="text-xs text-emerald-300 font-bold">
+              إجمالي المنصرف في الدفعة الحالية: <span class="font-mono text-sm text-white">${basketTotalExp.toLocaleString()} ج.م</span>
+            </div>
+          </div>
+          <button type="button" onclick="window.printAndCloseHandoverBatch()" class="sys-btn h-12 px-6 bg-emerald-500 hover:bg-emerald-400 text-slate-950 text-sm font-black shadow-lg">
+            <span>📋 اطبع حافظة التسليم واقفل الدفعة (${basketList.length})</span>
+          </button>
+        </div>
+
+        <div class="flex flex-wrap gap-2 pt-2 border-t border-emerald-500/30">
+          ${basketList.map(s => `
+            <div class="flex items-center gap-2 bg-slate-950 border border-emerald-700/60 px-3 py-1.5 rounded-xl text-xs">
+              <span class="font-mono font-black text-emerald-300">${esc(fmtCode(s))}</span>
+              <span class="font-bold text-white">${esc(s.siteName || '-')}</span>
+              <span class="text-slate-400">(${calcExp(s).toLocaleString()} ج.م)</span>
+              <button type="button" onclick="window.removeSheetFromHandoverBasket('${s.id}')" title="إرجاع لقائمة الطباعة" class="mr-1 px-2 py-0.5 rounded bg-slate-800 hover:bg-amber-600 text-amber-300 hover:text-slate-950 text-[10px] font-bold cursor-pointer">↩ إرجاع للطباعة</button>
+            </div>
+          `).join('')}
+        </div>
+      </div>
+    ` : `
+      <div class="sys-card border-slate-800 p-4 flex flex-wrap items-center justify-between gap-3 text-xs">
+        <div class="flex items-center gap-2.5 text-slate-300 font-bold">
+          <span class="w-8 h-8 rounded-xl bg-sky-500/15 border border-sky-500/40 text-sky-400 flex items-center justify-center font-black">1</span>
+          <span>اضغط <strong class="text-emerald-400">(اطبع الآن)</strong> على أي تصفية</span>
+          <span class="text-slate-500">←</span>
+          <span class="w-8 h-8 rounded-xl bg-amber-500/15 border border-amber-500/40 text-amber-400 flex items-center justify-center font-black">2</span>
+          <span>أكّد إن الورقة طلعت سليمة</span>
+          <span class="text-slate-500">←</span>
+          <span class="w-8 h-8 rounded-xl bg-emerald-500/15 border border-emerald-500/40 text-emerald-400 flex items-center justify-center font-black">3</span>
+          <span>اطبع <strong class="text-white">حافظة التسليم للحسابات</strong></span>
+        </div>
+        <span class="text-[11px] text-slate-400 font-bold">سلة التسليم فارغة حالياً</span>
+      </div>
+    `;
+
+    const tableRowsHtml = simpleTab === 'READY'
+      ? (filteredToPrint.length === 0
+          ? `<tr><td colspan="5" class="py-12 text-center text-emerald-400 font-black text-sm">ممتاز! لا توجد تصفيات متبقية للطباعة حالياً.</td></tr>`
+          : filteredToPrint.map((s, idx) => {
+              const exp = calcExp(s);
+              return `
+                <tr class="hover:bg-slate-800/50 transition">
+                  <td class="py-3.5 px-4">
+                    <div class="text-sm font-black text-white font-mono">${esc(fmtName(s))}</div>
+                    <div class="text-[11px] text-slate-400 mt-0.5">${esc(s.region || '-')} • ${esc(s.department || '-')} (${esc(s.activityType || '-')})</div>
+                  </td>
+                  <td class="py-3.5 px-4">
+                    <div class="font-bold text-white text-xs">${esc(s.submittedByEngineer || '-')}</div>
+                    <div class="text-[11px] text-amber-300 font-bold">ليدر: ${esc(s.teamLeader || '-')}</div>
+                  </td>
+                  <td class="py-3.5 px-4 font-mono font-black text-sky-400 text-sm">${exp.toLocaleString()} ج.م</td>
+                  <td class="py-3.5 px-4">
+                    <span class="px-3 py-1 rounded-full text-xs font-black bg-amber-950 text-amber-300 border border-amber-500/60">جاهزة للطباعة</span>
+                  </td>
+                  <td class="py-3.5 px-4 text-center">
+                    <button type="button" onclick="window.simplePrintNow('${s.id}')" class="sys-btn h-10 px-5 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black text-xs shadow-md">
+                      <span>🖨️ اطبع الآن</span>
+                    </button>
+                  </td>
+                </tr>
+              `;
+            }).join(''))
+      : (filteredDelivered.length === 0
+          ? `<tr><td colspan="5" class="py-12 text-center text-slate-400 font-bold text-sm">لا توجد تصفيات مسلّمة للحسابات مطابقة للبحث.</td></tr>`
+          : filteredDelivered.map(s => {
+              const exp = calcExp(s);
+              const pCnt = parseInt(s.printCount || 1, 10);
+              return `
+                <tr class="hover:bg-slate-800/40 transition">
+                  <td class="py-3 px-4">
+                    <div class="text-xs sm:text-sm font-bold text-white font-mono">${esc(fmtName(s))}</div>
+                    <div class="text-[11px] text-slate-400">${esc(s.department || '-')} • ${esc(s.region || '-')}</div>
+                  </td>
+                  <td class="py-3 px-4">
+                    <div class="font-bold text-white text-xs">${esc(s.submittedByEngineer || '-')}</div>
+                    <div class="text-[11px] text-amber-300">ليدر: ${esc(s.teamLeader || '-')}</div>
+                  </td>
+                  <td class="py-3 px-4 font-mono font-bold text-emerald-400 text-xs sm:text-sm">${exp.toLocaleString()} ج.م</td>
+                  <td class="py-3 px-4 space-y-1">
+                    <div class="text-[11px] font-bold text-emerald-300">تم التسليم: ${esc(s.deliveredToAccountsAt || s.hrConfirmedDate || '-')}</div>
+                    ${s.handoverBatchCode ? `<div class="inline-block px-2 py-0.5 rounded bg-sky-950 text-sky-300 border border-sky-700 font-mono text-[10px] font-black">حافظة: ${esc(s.handoverBatchCode)}</div>` : ''}
+                    <div class="text-[10px] text-slate-400">عدد مرات الطباعة: ${pCnt}</div>
+                  </td>
+                  <td class="py-3 px-4 text-center">
+                    <button type="button" onclick="window.simpleReprintDelivered('${s.id}')" class="sys-btn-sm bg-slate-800 hover:bg-rose-700 text-slate-200 hover:text-white border border-slate-700">
+                      <span>🖨️ إعادة طباعة (نسخة مكررة)</span>
+                    </button>
+                  </td>
+                </tr>
+              `;
+            }).join(''));
+
+    const pastBatchesHtml = (simpleTab === 'DELIVERED' && pastBatches.length > 0) ? `
+      <div class="sys-card p-4 space-y-2.5 border-sky-500/35">
+        <div class="text-xs font-black text-sky-300">إعادة طباعة حافظة تسليم سابقة للحسابات:</div>
+        <div class="flex flex-wrap gap-2">
+          ${pastBatches.map(b => `
+            <button type="button" onclick="window.reprintPastHandoverBatch('${esc(b.code)}')" class="sys-btn-sm bg-slate-950 hover:bg-sky-600 text-sky-300 hover:text-slate-950 border border-sky-700/60 font-mono">
+              <span>📋 ${esc(b.code)} (${b.items.length} تصفيات)</span>
+            </button>
+          `).join('')}
+        </div>
+      </div>
+    ` : '';
+
+    panel.innerHTML = `
+      ${basketHtml}
+
+      <div class="sys-card p-4 flex flex-wrap items-center justify-between gap-3">
+        <div class="grid grid-cols-2 gap-2 flex-1 min-w-[280px] max-w-xl">
+          <button type="button" onclick="window.setSimplePrintTab('READY')" class="sys-btn h-11 text-xs sm:text-sm font-black ${simpleTab === 'READY' ? 'bg-amber-400 text-slate-950 shadow-md' : 'bg-slate-950 text-slate-300 border border-slate-800 hover:text-white'}">
+            <span>🖨️ جاهز للطباعة</span>
+            <span class="px-2 py-0.5 rounded-full text-xs font-black ${simpleTab === 'READY' ? 'bg-slate-950 text-amber-300' : 'bg-slate-800 text-amber-400'}">${toPrintList.length}</span>
+          </button>
+          <button type="button" onclick="window.setSimplePrintTab('DELIVERED')" class="sys-btn h-11 text-xs sm:text-sm font-black ${simpleTab === 'DELIVERED' ? 'bg-emerald-500 text-slate-950 shadow-md' : 'bg-slate-950 text-slate-300 border border-slate-800 hover:text-white'}">
+            <span>✅ تم التسليم للحسابات</span>
+            <span class="px-2 py-0.5 rounded-full text-xs font-black ${simpleTab === 'DELIVERED' ? 'bg-slate-950 text-emerald-300' : 'bg-slate-800 text-emerald-400'}">${deliveredList.length}</span>
+          </button>
+        </div>
+
+        <div class="flex-1 min-w-[220px] max-w-sm">
+          <input type="text" value="${esc(simpleSearch)}" oninput="window.setSimplePrintSearch(this.value)" placeholder="بحث سريع بالكود SYS- أو الموقع أو المهندس..." class="sys-input w-full px-4 py-2.5 text-xs font-bold">
+        </div>
+      </div>
+
+      ${pastBatchesHtml}
+
+      <div class="sys-card overflow-hidden">
+        <div class="px-5 py-3.5 bg-slate-950 border-b border-slate-800 flex items-center justify-between">
+          <h3 class="font-black text-sm text-white">${simpleTab === 'READY' ? 'التصفيات المطلوب طباعتها الآن' : 'سجل التصفيات المسلّمة للحسابات'}</h3>
+          <span class="px-3 py-0.5 rounded-full text-xs font-black bg-slate-800 text-sky-300">${simpleTab === 'READY' ? filteredToPrint.length : filteredDelivered.length} استمارة</span>
+        </div>
+        <div class="overflow-x-auto">
+          <table class="w-full text-right text-xs">
+            <thead class="bg-slate-950/70 text-slate-400 font-bold border-b border-slate-800">
+              <tr>
+                <th class="py-3 px-4">التصفية والموقع</th>
+                <th class="py-3 px-4">المهندس / الفني والتيم ليدر</th>
+                <th class="py-3 px-4">المنصرف</th>
+                <th class="py-3 px-4">الحالة</th>
+                <th class="py-3 px-4 text-center">الإجراء</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-slate-800/60 text-slate-200">${tableRowsHtml}</tbody>
+          </table>
+        </div>
+      </div>
+    `;
+  };
+
+  function showPostPrintConfirmModal(sheet) {
+    document.getElementById('simplePostPrintConfirmModal')?.remove();
+    const m = document.createElement('div');
+    m.id = 'simplePostPrintConfirmModal';
+    m.className = 'fixed inset-0 z-[200] bg-slate-950/90 backdrop-blur-md flex items-center justify-center p-4 no-print';
+    m.innerHTML = `
+      <div class="sys-card border-2 border-emerald-500/70 max-w-md w-full p-6 text-center space-y-5 text-slate-100 shadow-2xl">
+        <div class="w-16 h-16 mx-auto rounded-2xl bg-emerald-500/15 border border-emerald-500/50 flex items-center justify-center text-3xl">🖨️</div>
+        <div class="space-y-1.5">
+          <h3 class="text-lg font-black text-white">هل الورقة طلعت سليمة من الطابعة؟</h3>
+          <div class="text-sm font-mono font-black text-sky-400 bg-slate-950 py-2 px-3 rounded-xl border border-slate-800">${esc(fmtName(sheet))}</div>
+          <p class="text-xs text-slate-400">لو الطابعة حشرت ورق أو الورقة فيها مشكلة اضغط (لأ) عشان تفضل قدامك وتطبعها تاني.</p>
+        </div>
+        <div class="flex flex-col gap-2.5 pt-1">
+          <button type="button" onclick="window.confirmSheetPrintedCleanly('${sheet.id}')" class="sys-btn h-12 w-full bg-emerald-500 hover:bg-emerald-400 text-slate-950 text-sm font-black shadow-lg">
+            <span>✓ أيوه طلعت سليمة — أضفها لحافظة التسليم</span>
+          </button>
+          <button type="button" onclick="document.getElementById('simplePostPrintConfirmModal').remove()" class="sys-btn h-11 w-full bg-slate-800 hover:bg-slate-700 text-amber-300 border border-slate-700 text-xs font-black">
+            <span>✕ لأ — خليها في القائمة أطبعها تاني</span>
+          </button>
+        </div>
+      </div>
+    `;
+    document.body.appendChild(m);
+  }
+
+  window.simplePrintNow = function(sheetId) {
+    const s = (window.cachedClearancesList || []).find(x => x.id === sheetId);
+    if (!s) return alert('لم يتم العثور على التصفية.');
+    if (typeof window.openClearanceReview !== 'function') return;
+
+    window.openClearanceReview(sheetId, true);
+
+    const prevCnt = parseInt(s.printCount || 0, 10);
+    const nextCnt = prevCnt + 1;
+    const isReprint = prevCnt >= 1;
+    const officer = window.currentUser?.name || 'مسؤول الطباعة';
+    const timeStr = nowDateTimeStr();
+
+    const banner = {
+      isReprint,
+      text: isReprint
+        ? `⚠️ نسخة مكررة رقم ${nextCnt} • طبعت بواسطة: ${officer} (${timeStr}) • الأصل: ${s.firstPrintedBy || '-'}`
+        : `نسخة أصلية رقم 1 • طبعت بواسطة: ${officer} (${timeStr})`
+    };
+
+    let dialogShown = false;
+    const onFinished = () => {
+      if (dialogShown) return;
+      dialogShown = true;
+      if (typeof window.closeClearanceModal === 'function') window.closeClearanceModal();
+      showPostPrintConfirmModal(s);
+    };
+
+    window._sysconAfterPrintCallback = onFinished;
+
+    setTimeout(() => {
+      if (typeof window.sysconRunCleanPrintWithBanner === 'function') {
+        window.sysconRunCleanPrintWithBanner(banner);
+      } else {
+        window.print();
+      }
+      // احتياطي لو المتصفح مبعتش afterprint
+      setTimeout(() => {
+        if (!dialogShown && !document.hidden) onFinished();
+      }, 2200);
+    }, 320);
+  };
+
+  window.confirmSheetPrintedCleanly = async function(sheetId) {
+    document.getElementById('simplePostPrintConfirmModal')?.remove();
+    const s = (window.cachedClearancesList || []).find(x => x.id === sheetId);
+    if (!s) return;
+
+    const officer = window.currentUser?.name || 'مسؤول الطباعة';
+    const timeStr = nowDateTimeStr();
+    const nextCnt = parseInt(s.printCount || 0, 10) + 1;
+    const firstBy = s.firstPrintedBy || officer;
+    const firstAt = s.firstPrintedAtStr || timeStr;
+
+    s.printedReadyForHandover = true;
+    s.printedReadyAt = timeStr;
+    s.printedReadyBy = officer;
+    s.isPrinted = true;
+    s.printCount = nextCnt;
+    s.firstPrintedBy = firstBy;
+    s.firstPrintedAtStr = firstAt;
+    s.lastPrintedBy = officer;
+    s.lastPrintedAtStr = timeStr;
+
+    if (typeof db !== 'undefined') {
+      await db.collection('clearance_sheets').doc(sheetId).update({
+        printedReadyForHandover: true,
+        printedReadyAt: timeStr,
+        printedReadyBy: officer,
+        isPrinted: true,
+        printCount: nextCnt,
+        firstPrintedBy: firstBy,
+        firstPrintedAtStr: firstAt,
+        lastPrintedBy: officer,
+        lastPrintedAtStr: timeStr
+      }).catch(() => {});
+    }
+
+    window.renderSimplePrintOfficerDashboard();
+  };
+
+  window.removeSheetFromHandoverBasket = async function(sheetId) {
+    const s = (window.cachedClearancesList || []).find(x => x.id === sheetId);
+    if (!s) return;
+    s.printedReadyForHandover = false;
+    if (typeof db !== 'undefined') {
+      await db.collection('clearance_sheets').doc(sheetId).update({
+        printedReadyForHandover: false
+      }).catch(() => {});
+    }
+    window.renderSimplePrintOfficerDashboard();
+  };
+
+  window.simpleReprintDelivered = async function(sheetId) {
+    const s = (window.cachedClearancesList || []).find(x => x.id === sheetId);
+    if (!s) return;
+    const nextCnt = parseInt(s.printCount || 1, 10) + 1;
+    const ok = confirm(`⚠️ تنبيه هام:
+هذه التصفية (${fmtName(s)}) تم تسليمها للحسابات مسبقاً!
+ستُطبع عليها عبارة (نسخة مكررة رقم ${nextCnt}) باللون الأحمر حتى لا يتم صرفها مرتين.
+هل تريد إعادة الطباعة؟`);
+    if (!ok) return;
+
+    const officer = window.currentUser?.name || 'مسؤول الطباعة';
+    const timeStr = nowDateTimeStr();
+    s.printCount = nextCnt;
+    s.lastPrintedBy = officer;
+    s.lastPrintedAtStr = timeStr;
+
+    if (typeof db !== 'undefined') {
+      db.collection('clearance_sheets').doc(sheetId).update({
+        printCount: nextCnt,
+        lastPrintedBy: officer,
+        lastPrintedAtStr: timeStr
+      }).catch(() => {});
+    }
+
+    if (typeof window.openClearanceReview === 'function') {
+      window.openClearanceReview(sheetId, true);
+    }
+
+    window._sysconAfterPrintCallback = () => {
+      if (typeof window.closeClearanceModal === 'function') window.closeClearanceModal();
+      window.renderSimplePrintOfficerDashboard();
+    };
+
+    setTimeout(() => {
+      if (typeof window.sysconRunCleanPrintWithBanner === 'function') {
+        window.sysconRunCleanPrintWithBanner({
+          isReprint: true,
+          text: `⚠️ نسخة مكررة رقم ${nextCnt} — تم تسليم الأصل للحسابات مسبقاً (${s.deliveredToAccountsAt || '-'}) • إعادة طباعة بواسطة: ${officer} (${timeStr})`
+        });
+      } else {
+        window.print();
+      }
+    }, 320);
+  };
+
+  function printHandoverCoverSheetHtml(batchCode, sheets, deliveredBy, dateStr, isReprint) {
+    const oldHost = document.getElementById('sysconOfficialPrintHost');
+    if (oldHost) oldHost.remove();
+
+    let totalAdv = 0, totalExp = 0;
+    const rowsHtml = sheets.map((s, idx) => {
+      const adv = parseFloat(s.advanceAmount) || 0;
+      const exp = calcExp(s);
+      const net = adv - exp;
+      totalAdv += adv;
+      totalExp += exp;
+      return `
+        <tr>
+          <td style="border:1.5px solid #1e293b;padding:5px;text-align:center;font-weight:800;">${idx + 1}</td>
+          <td style="border:1.5px solid #1e293b;padding:5px;text-align:center;font-family:monospace;font-weight:900;color:#0369a1;">${esc(fmtCode(s))}</td>
+          <td style="border:1.5px solid #1e293b;padding:5px;text-align:center;font-weight:800;">${esc(s.siteName || '-')}</td>
+          <td style="border:1.5px solid #1e293b;padding:5px;text-align:center;">${esc(s.department || '-')}</td>
+          <td style="border:1.5px solid #1e293b;padding:5px;text-align:center;font-weight:700;">${esc(s.submittedByEngineer || '-')}</td>
+          <td style="border:1.5px solid #1e293b;padding:5px;text-align:center;">${esc(s.teamLeader || '-')}</td>
+          <td style="border:1.5px solid #1e293b;padding:5px;text-align:center;font-family:monospace;font-weight:700;">${adv.toLocaleString()}</td>
+          <td style="border:1.5px solid #1e293b;padding:5px;text-align:center;font-family:monospace;font-weight:900;">${exp.toLocaleString()}</td>
+          <td style="border:1.5px solid #1e293b;padding:5px;text-align:center;font-family:monospace;font-weight:800;">${net.toLocaleString()}</td>
+        </tr>
+      `;
+    }).join('');
+
+    const totalNet = totalAdv - totalExp;
+    const host = document.createElement('div');
+    host.id = 'sysconOfficialPrintHost';
+    host.style.cssText = 'display:flex; justify-content:center; align-items:flex-start; width:100%; margin:0; padding:0; background:#ffffff;';
+
+    host.innerHTML = `
+      <div dir="rtl" style="width:980px; background:#ffffff; color:#000000; padding:18px 22px; font-family:'Cairo',Tahoma,Arial,sans-serif; border:2px solid #0f172a; border-radius:10px; box-sizing:border-box;">
+        ${isReprint ? `<div style="background:#fee2e2;color:#991b1b;border:2px dashed #dc2626;padding:5px;border-radius:6px;text-align:center;font-weight:900;font-size:12px;margin-bottom:10px;">⚠️ نسخة مكررة من حافظة التسليم رقم (${esc(batchCode)})</div>` : ''}
+        <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:2.5px solid #0284c7; padding-bottom:10px; margin-bottom:14px;">
+          <div>
+            <div style="font-size:18px; font-weight:900; color:#0f172a;">شركة سيستل للاتصالات — SYSCON</div>
+            <div style="font-size:14px; font-weight:800; color:#0369a1; margin-top:2px;">حافظة تسليم تصفيات مالية إلى إدارة الحسابات</div>
+          </div>
+          <div style="text-align:left; font-size:12px; font-weight:800; background:#f0f9ff; border:1.5px solid #0284c7; padding:8px 14px; border-radius:8px;">
+            <div>رقم الحافظة: <span style="font-family:monospace; color:#0369a1; font-size:14px;">${esc(batchCode)}</span></div>
+            <div style="margin-top:2px;">التاريخ: <span style="font-family:monospace;">${esc(dateStr)}</span></div>
+            <div style="margin-top:2px;">عدد التصفيات: <span style="color:#059669; font-size:14px;">${sheets.length}</span></div>
+          </div>
+        </div>
+
+        <table style="width:100%; border-collapse:collapse; font-size:11.5px; margin-bottom:16px;">
+          <thead>
+            <tr style="background:#f1f5f9;">
+              <th style="border:1.5px solid #1e293b;padding:6px;width:36px;">#</th>
+              <th style="border:1.5px solid #1e293b;padding:6px;">كود التصفية</th>
+              <th style="border:1.5px solid #1e293b;padding:6px;">الموقع</th>
+              <th style="border:1.5px solid #1e293b;padding:6px;">القسم</th>
+              <th style="border:1.5px solid #1e293b;padding:6px;">المهندس / الفني</th>
+              <th style="border:1.5px solid #1e293b;padding:6px;">التيم ليدر</th>
+              <th style="border:1.5px solid #1e293b;padding:6px;">العهدة (ج.م)</th>
+              <th style="border:1.5px solid #1e293b;padding:6px;">المنصرف (ج.م)</th>
+              <th style="border:1.5px solid #1e293b;padding:6px;">الصافي (ج.م)</th>
+            </tr>
+          </thead>
+          <tbody>${rowsHtml}</tbody>
+          <tfoot>
+            <tr style="background:#e0f2fe; font-weight:900; font-size:12.5px;">
+              <td colspan="6" style="border:1.5px solid #1e293b;padding:7px;text-align:center;">الإجمالي الكلي للدفعة (${sheets.length} تصفيات)</td>
+              <td style="border:1.5px solid #1e293b;padding:7px;text-align:center;font-family:monospace;">${totalAdv.toLocaleString()}</td>
+              <td style="border:1.5px solid #1e293b;padding:7px;text-align:center;font-family:monospace;color:#b91c1c;">${totalExp.toLocaleString()}</td>
+              <td style="border:1.5px solid #1e293b;padding:7px;text-align:center;font-family:monospace;color:#065f46;">${totalNet.toLocaleString()}</td>
+            </tr>
+          </tfoot>
+        </table>
+
+        <div style="display:flex; justify-content:space-between; gap:24px; margin-top:26px; padding-top:12px;">
+          <div style="flex:1; border:1.5px solid #334155; border-radius:8px; padding:12px; text-align:center;">
+            <div style="font-weight:900; font-size:12.5px; color:#0f172a; margin-bottom:6px;">توقيع المُسلِّم (مسؤول الطباعة والتسليم)</div>
+            <div style="font-size:12px; font-weight:800; color:#0369a1; margin-bottom:26px;">الاسم: ${esc(deliveredBy)}</div>
+            <div style="border-top:1px dotted #64748b; padding-top:4px; font-size:10.5px; color:#475569;">التوقيع والتاريخ</div>
+          </div>
+          <div style="flex:1; border:1.5px solid #059669; border-radius:8px; padding:12px; text-align:center; background:#f0fdf4;">
+            <div style="font-weight:900; font-size:12.5px; color:#065f46; margin-bottom:6px;">توقيع المستلم (إدارة الحسابات والمراجعة المالية)</div>
+            <div style="font-size:11.5px; font-weight:700; color:#334155; margin-bottom:26px;">أقر باستلام عدد (${sheets.length}) استمارة تصفية مرفقة بهذه الحافظة</div>
+            <div style="border-top:1px dotted #059669; padding-top:4px; font-size:10.5px; color:#065f46;">الاسم / التوقيع / التاريخ والختم</div>
+          </div>
+        </div>
+      </div>
+    `;
+
+    document.body.appendChild(host);
+    window._sysconCustomPrintMode = 'HANDOVER';
+    document.title = `حافظة_تسليم_${batchCode}`;
+
+    setTimeout(() => {
+      window.print();
+    }, 120);
+  }
+
+  window.printAndCloseHandoverBatch = async function() {
+    const allReady = getReadyForFinanceAll();
+    const basketList = allReady.filter(s => !s.deliveredToAccounts && !s.hrConfirmed && s.printedReadyForHandover === true);
+    if (basketList.length === 0) return alert('لا توجد تصفيات مطبوعة في سلة التسليم حالياً.');
+
+    const totalExp = basketList.reduce((sum, s) => sum + calcExp(s), 0);
+    const ok = confirm(`سيتم طباعة حافظة تسليم للحسابات بعدد (${basketList.length}) تصفية بإجمالي منصرف (${totalExp.toLocaleString()} ج.م) ونقلهم إلى (تم التسليم للحسابات).
+هل تريد المتابعة؟`);
+    if (!ok) return;
+
+    const batchCode = genBatchCode();
+    const timeStr = nowDateTimeStr();
+    const officer = window.currentUser?.name || 'مسؤول الطباعة والتسليم';
+
+    for (const s of basketList) {
+      s.deliveredToAccounts = true;
+      s.deliveredToAccountsBy = officer;
+      s.deliveredToAccountsAt = timeStr;
+      s.deliveredToAccountsTimestamp = Date.now();
+      s.hrConfirmed = true;
+      s.hrArchived = true;
+      s.hrConfirmedBy = officer;
+      s.hrConfirmedDate = timeStr;
+      s.printedReadyForHandover = false;
+      s.handoverBatchCode = batchCode;
+
+      if (typeof db !== 'undefined') {
+        await db.collection('clearance_sheets').doc(s.id).update({
+          deliveredToAccounts: true,
+          deliveredToAccountsBy: officer,
+          deliveredToAccountsAt: timeStr,
+          deliveredToAccountsTimestamp: Date.now(),
+          hrConfirmed: true,
+          hrArchived: true,
+          hrConfirmedBy: officer,
+          hrConfirmedDate: timeStr,
+          hrConfirmedAt: Date.now(),
+          printedReadyForHandover: false,
+          handoverBatchCode: batchCode
+        }).catch(() => {});
+      }
+
+      if (typeof window.sendSysconNotif === 'function') {
+        window.sendSysconNotif({
+          targetUserId: s.engineerUserId, targetEmail: s.engineerEmail, targetName: s.submittedByEngineer,
+          siteName: fmtName(s), sheetId: s.id, actionTitle: "تسليم التصفية للحسابات",
+          message: `تم تسليم تصفية (${fmtName(s)}) للحسابات ضمن حافظة رقم (${batchCode}) بواسطة (${officer}).`
+        });
+      }
+    }
+
+    if (typeof window.logSysconAudit === 'function') {
+      window.logSysconAudit("تسليم حافظة تصفيات للحسابات", `حافظة رقم ${batchCode} • عدد (${basketList.length}) تصفية • إجمالي (${totalExp.toLocaleString()} ج.م)`);
+    }
+
+    window._sysconAfterPrintCallback = () => {
+      window.renderSimplePrintOfficerDashboard();
+    };
+
+    printHandoverCoverSheetHtml(batchCode, basketList, officer, timeStr, false);
+    window.renderSimplePrintOfficerDashboard();
+  };
+
+  window.reprintPastHandoverBatch = function(batchCode) {
+    const sheets = (window.cachedClearancesList || []).filter(s => s.handoverBatchCode === batchCode);
+    if (sheets.length === 0) return alert('لم يتم العثور على تصفيات لهذه الحافظة.');
+    const first = sheets[0];
+    printHandoverCoverSheetHtml(
+      batchCode,
+      sheets,
+      first.deliveredToAccountsBy || first.hrConfirmedBy || window.currentUser?.name || '-',
+      first.deliveredToAccountsAt || first.hrConfirmedDate || nowDateTimeStr(),
+      true
+    );
+  };
 })();
 </script>
 </body>
