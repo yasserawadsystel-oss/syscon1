@@ -2779,16 +2779,21 @@
       if (s.deliveredToAccounts || s.hrConfirmed) {
         return `<span class="px-2.5 py-1 rounded-full text-[10.5px] font-black bg-emerald-950 text-emerald-300 border border-emerald-600">مؤرشفة ومُسلّمة للحسابات</span>`;
       }
-      if (s.cooApproved) {
-        return `<span class="px-2.5 py-1 rounded-full text-[10.5px] font-black bg-blue-950 text-blue-300 border border-blue-600">بانتظار الصرف المالي (HR)</span>`;
-      }
+      const cooOk = (s.cooApproved === true || s.isCooApproved === true);
       if (isLeaderSelfClearance(s)) {
+        if (cooOk) {
+          return `<span class="px-2.5 py-1 rounded-full text-[10.5px] font-black bg-blue-950 text-blue-300 border border-blue-600">جاهز للطباعة والصرف المالي (HR)</span>`;
+        }
         return `<span class="px-2.5 py-1 rounded-full text-[10.5px] font-black bg-indigo-950 text-indigo-300 border border-indigo-600">بانتظار اعتماد COO (مسار مباشر)</span>`;
       }
-      if (s.technicalApproved) {
+      const ldrOk = st === 'APPROVED' || s.isApproved === true || Boolean(s.signatureData);
+      if (ldrOk && s.technicalApproved === true && cooOk) {
+        return `<span class="px-2.5 py-1 rounded-full text-[10.5px] font-black bg-blue-950 text-blue-300 border border-blue-600">جاهز للطباعة والصرف المالي (HR)</span>`;
+      }
+      if (ldrOk && s.technicalApproved === true) {
         return `<span class="px-2.5 py-1 rounded-full text-[10.5px] font-black bg-indigo-950 text-indigo-300 border border-indigo-600">بانتظار اعتماد COO</span>`;
       }
-      if (st === 'APPROVED' || s.isApproved || s.signatureData) {
+      if (ldrOk) {
         return `<span class="px-2.5 py-1 rounded-full text-[10.5px] font-black bg-sky-950 text-sky-300 border border-sky-600">بانتظار الإدارة الفنية</span>`;
       }
       return `<span class="px-2.5 py-1 rounded-full text-[10.5px] font-black bg-amber-950 text-amber-300 border border-amber-600">بانتظار التيم ليدر (${escapeHtml(s.teamLeader || '-')})</span>`;
@@ -4396,9 +4401,10 @@
         await db.collection("clearance_sheets").doc(s.id).update({
           technicalApproved: true, technicalApprovedBy: approver,
           technicalApprovalDate: dateStr, technicalApprovalTimestamp: Date.now(),
+          technicalReturnReason: null, returnedByTechnical: false,
           readyForCoo: true
         });
-        s.technicalApproved = true; s.technicalApprovedBy = approver; s.technicalApprovalDate = dateStr;
+        s.technicalApproved = true; s.technicalApprovedBy = approver; s.technicalApprovalDate = dateStr; s.technicalReturnReason = null; s.returnedByTechnical = false;
         logAudit("اعتماد الإدارة الفنية", `التصفية: ${getFullDisplayName(s)} بواسطة ${approver}`);
         await sendNotif({ targetUserId: s.engineerUserId, targetEmail: s.engineerEmail, targetName: s.submittedByEngineer, siteName: getFullDisplayName(s), sheetId: s.id, actionTitle: "اعتماد الإدارة الفنية", message: `تم اعتماد مطابقة الفنيين للتصفية (${getFullDisplayName(s)}) بواسطة ${approver}.` });
         await sendNotif({ targetRole: 'coo', siteName: getFullDisplayName(s), sheetId: s.id, actionTitle: "تصفية جاهزة لاعتماد COO", message: `تمت الموافقة الفنية على تصفية (${getFullDisplayName(s)}) وبانتظار اعتماد COO.` });
@@ -4435,10 +4441,15 @@
     // 8. بوابة المراجعة المالية والحسابات (HR)
     function isReadyForFinance(s) {
       if (!s) return false;
-      if (s.cooApproved === true || s.isCooApproved === true) return true;
-      const ldrOk = String(s.status || '').toUpperCase() === 'APPROVED' || s.isApproved === true || Boolean(s.signatureData);
-      const techOk = s.technicalApproved === true || isLeaderSelfClearance(s);
-      return ldrOk && techOk;
+      if (s.deliveredToAccounts === true || s.hrConfirmed === true) return true;
+      const st = String(s.status || '').toUpperCase().trim();
+      if (st === 'REJECTED' || s.isRejected === true) return false;
+      const cooOk = (s.cooApproved === true || s.isCooApproved === true);
+      if (!cooOk) return false;
+      if (isLeaderSelfClearance(s)) return true;
+      const ldrOk = st === 'APPROVED' || s.isApproved === true || Boolean(s.signatureData);
+      const techOk = s.technicalApproved === true;
+      return ldrOk && techOk && cooOk;
     }
 
     window.switchHrSubTab = function(tab) {
@@ -4994,14 +5005,21 @@
       if (role === 'coo') {
         if (!hasPerm('canApproveCoo')) return alert('غير مصرح.');
         const next = !currentReviewItem.cooApproved;
+        if (next && !isLeaderSelfClearance(currentReviewItem)) {
+          const stC = String(currentReviewItem.status || '').toUpperCase().trim();
+          const ldrOk = stC === 'APPROVED' || currentReviewItem.isApproved === true || Boolean(currentReviewItem.signatureData);
+          if (!ldrOk) return alert('لا يمكن اعتماد COO قبل اعتماد التيم ليدر أولاً.');
+          if (currentReviewItem.technicalApproved !== true) return alert('لا يمكن اعتماد COO قبل اعتماد الإدارة الفنية أولاً.');
+        }
         const by = window.currentUser.name || 'م. محمد منير';
         await db.collection("clearance_sheets").doc(currentReviewItem.id).update({
           cooApproved: next, cooApprovedBy: next ? by : null, cooApprovalDate: next ? dateStr : null
         });
-        currentReviewItem.cooApproved = next; currentReviewItem.cooApprovedBy = by; currentReviewItem.cooApprovalDate = dateStr;
+        currentReviewItem.cooApproved = next; currentReviewItem.cooApprovedBy = next ? by : null; currentReviewItem.cooApprovalDate = next ? dateStr : null;
         if (next) {
-          await sendNotif({ targetRole: 'hr', siteName: full, sheetId: currentReviewItem.id, actionTitle: "تصفية معتمدة من COO", message: `تم اعتماد تصفية (${full}) من COO وهي جاهزة للصرف المالي.` });
+          await sendNotif({ targetRole: 'hr', siteName: full, sheetId: currentReviewItem.id, actionTitle: "تصفية معتمدة من COO", message: `تم اعتماد تصفية (${full}) من COO وهي جاهزة للطباعة والصرف المالي.` });
         }
+        renderAllViews();
         openClearanceReview(currentReviewItem.id, false);
       } else if (role === 'ceo') {
         if (!hasPerm('canApproveCeo')) return alert('غير مصرح.');
@@ -6925,10 +6943,15 @@
       return `<span class="px-2.5 py-0.5 rounded-full text-[10px] font-black bg-rose-950 text-rose-300 border border-rose-700">مرجعة للتعديل</span><div class="text-[10px] text-amber-300 mt-0.5">${esc(rsn)}</div>`;
     }
     if (s.deliveredToAccounts || s.hrConfirmed) return `<span class="px-2.5 py-1 rounded-full text-[10.5px] font-black bg-emerald-950 text-emerald-300 border border-emerald-600">مؤرشفة ومُسلّمة للحسابات</span>`;
-    if (s.cooApproved) return `<span class="px-2.5 py-1 rounded-full text-[10.5px] font-black bg-blue-950 text-blue-300 border border-blue-600">بانتظار الصرف المالي (HR)</span>`;
-    if (isLeaderSelf(s)) return `<span class="px-2.5 py-1 rounded-full text-[10.5px] font-black bg-indigo-950 text-indigo-300 border border-indigo-600">بانتظار اعتماد COO (مسار مباشر)</span>`;
-    if (s.technicalApproved) return `<span class="px-2.5 py-1 rounded-full text-[10.5px] font-black bg-indigo-950 text-indigo-300 border border-indigo-600">بانتظار اعتماد COO</span>`;
-    if (st === 'APPROVED' || s.isApproved || s.signatureData) return `<span class="px-2.5 py-1 rounded-full text-[10.5px] font-black bg-sky-950 text-sky-300 border border-sky-600">بانتظار الإدارة الفنية</span>`;
+    const cooOk = (s.cooApproved === true || s.isCooApproved === true);
+    if (isLeaderSelf(s)) {
+      if (cooOk) return `<span class="px-2.5 py-1 rounded-full text-[10.5px] font-black bg-blue-950 text-blue-300 border border-blue-600">جاهز للطباعة والصرف المالي (HR)</span>`;
+      return `<span class="px-2.5 py-1 rounded-full text-[10.5px] font-black bg-indigo-950 text-indigo-300 border border-indigo-600">بانتظار اعتماد COO (مسار مباشر)</span>`;
+    }
+    const ldrOk = st === 'APPROVED' || s.isApproved === true || Boolean(s.signatureData);
+    if (ldrOk && s.technicalApproved === true && cooOk) return `<span class="px-2.5 py-1 rounded-full text-[10.5px] font-black bg-blue-950 text-blue-300 border border-blue-600">جاهز للطباعة والصرف المالي (HR)</span>`;
+    if (ldrOk && s.technicalApproved === true) return `<span class="px-2.5 py-1 rounded-full text-[10.5px] font-black bg-indigo-950 text-indigo-300 border border-indigo-600">بانتظار اعتماد COO</span>`;
+    if (ldrOk) return `<span class="px-2.5 py-1 rounded-full text-[10.5px] font-black bg-sky-950 text-sky-300 border border-sky-600">بانتظار الإدارة الفنية</span>`;
     return `<span class="px-2.5 py-1 rounded-full text-[10.5px] font-black bg-amber-950 text-amber-300 border border-amber-600">بانتظار التيم ليدر (${esc(s.teamLeader || '-')})</span>`;
   }
 
