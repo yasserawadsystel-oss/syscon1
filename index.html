@@ -2293,7 +2293,8 @@
       { key: 'canToggleMaintenance', group: 'إدارة النظام', label: 'وضع الصيانة' }
     ];
 
-    const SESSION_TIMEOUT_MS = 45000;
+    const SESSION_TIMEOUT_MS = 420000;
+    const HEARTBEAT_INTERVAL_MS = 300000;
     const PERSIST_SESSION_KEY = "systel_active_user_session_v3";
     const MP_STORAGE_KEY = "systel_manpower_v4";
     const BOM_DOC_ID = "__SYSCON_BOM_PRICES__";
@@ -2340,6 +2341,11 @@
     let isMaintenanceBypassed = false;
     let lastKnownClearancesCount = 0;
     let heartbeatTimer = null;
+    let lastHeartbeatSentAt = 0;
+    let visibilityHeartbeatBound = false;
+    let dataListenersBound = false;
+    let activeDataUnsubscribers = [];
+    let maintenanceListenerBound = false;
     let selectedPermUserId = null;
     let dirSearchQuery = '';
     let dirRoleFilter = 'ALL';
@@ -2932,23 +2938,39 @@
         const _ov = document.getElementById('loginOverlay'); if (_ov) { _ov.style.removeProperty('display'); _ov.classList.add('hidden'); _ov.classList.remove('flex'); }
         applyRoleUI();
         setAppMode(window.currentUser.activeViewMode || 'leader');
-        startHeartbeat();
+        bindFirebaseListeners();
+        startHeartbeat(false);
         renderAllViews();
         return true;
       } catch (e) { return false; }
     }
 
-    function startHeartbeat() {
+    function sendHeartbeatPing(forceNow = false) {
+      if (!window.currentUser.id || typeof db === 'undefined') return;
+      if (document.hidden && !forceNow) return;
+      const now = Date.now();
+      if (!forceNow && (now - lastHeartbeatSentAt) < 240000) return;
+      lastHeartbeatSentAt = now;
+      db.collection("user_accounts").doc(window.currentUser.id).update({
+        isOnline: true, activeSessionDeviceId: clientDeviceId, lastActivePing: now
+      }).catch(() => {});
+    }
+
+    function startHeartbeat(skipInitialPing = false) {
       if (heartbeatTimer) clearInterval(heartbeatTimer);
       if (!window.currentUser.id) return;
-      const ping = () => {
-        if (!window.currentUser.id) return;
-        db.collection("user_accounts").doc(window.currentUser.id).update({
-          isOnline: true, activeSessionDeviceId: clientDeviceId, lastActivePing: Date.now()
-        }).catch(() => {});
-      };
-      ping();
-      heartbeatTimer = setInterval(ping, 15000);
+      if (skipInitialPing) {
+        lastHeartbeatSentAt = Date.now();
+      } else {
+        sendHeartbeatPing(true);
+      }
+      heartbeatTimer = setInterval(() => sendHeartbeatPing(false), HEARTBEAT_INTERVAL_MS);
+      if (!visibilityHeartbeatBound) {
+        visibilityHeartbeatBound = true;
+        document.addEventListener('visibilitychange', () => {
+          if (!document.hidden && window.currentUser.id) sendHeartbeatPing(false);
+        });
+      }
     }
 
     window.toggleAuthMode = function(mode) {
@@ -3066,7 +3088,8 @@
         };
 
         saveSession();
-        startHeartbeat();
+        bindFirebaseListeners();
+        startHeartbeat(true);
 
         document.getElementById('headerUserName').textContent = window.currentUser.name;
         document.getElementById('headerUserRole').textContent = window.currentUser.jobTitle;
@@ -3095,14 +3118,12 @@
 
       try {
         const password = rawPwd.startsWith('sha256$') ? rawPwd : await hashPassword(rawPwd);
-        const snap = await db.collection("user_accounts").get();
-        let dupEmail = false, dupPhone = false;
-        snap.forEach(d => {
-          const u = d.data();
-          if (u.isSystemConfigDoc) return;
-          if (String(u.email || '').toLowerCase().trim() === email) dupEmail = true;
-          if (normalizePhone(u.phone || u.mobile) === phone) dupPhone = true;
-        });
+        const [emSnap, phSnap] = await Promise.all([
+          db.collection("user_accounts").where("email", "==", email).limit(1).get(),
+          db.collection("user_accounts").where("phone", "==", phone).limit(1).get()
+        ]);
+        const dupEmail = !emSnap.empty;
+        const dupPhone = !phSnap.empty;
         if (dupEmail) return alert('هذا البريد الإلكتروني مسجل بالفعل.');
         if (dupPhone) return alert('رقم الموبايل هذا مسجل بالفعل لحساب آخر.');
 
@@ -3151,11 +3172,11 @@
       if (!em || ph.length !== 11) return alert('يرجى إدخال البريد الإلكتروني ورقم الموبايل المطابق (11 رقم).');
 
       try {
-        const snap = await db.collection("user_accounts").get();
+        const snap = await db.collection("user_accounts").where("email", "==", em).limit(1).get();
         let found = null;
         snap.forEach(d => {
           const u = d.data();
-          if (String(u.email || '').toLowerCase().trim() === em && normalizePhone(u.phone || u.mobile) === ph) {
+          if (normalizePhone(u.phone || u.mobile) === ph) {
             found = { id: d.id, ...u };
           }
         });
@@ -3219,11 +3240,16 @@
           if (d.exists) target = { id: d.id, ...d.data() };
         } else {
           const ident = (document.getElementById('cpIdent')?.value || '').trim().toLowerCase();
-          const snap = await db.collection("user_accounts").get();
-          snap.forEach(doc => {
-            const u = doc.data();
-            if (String(u.email || '').toLowerCase().trim() === ident || String(u.phone || '').trim() === ident) target = { id: doc.id, ...u };
-          });
+          const phIdent = normalizePhone(ident);
+          let snap;
+          if (ident.includes('@')) {
+            snap = await db.collection("user_accounts").where("email", "==", ident).limit(1).get();
+          } else if (phIdent.length === 11) {
+            snap = await db.collection("user_accounts").where("phone", "==", phIdent).limit(1).get();
+          }
+          if (snap) {
+            snap.forEach(doc => { target = { id: doc.id, ...doc.data() }; });
+          }
         }
         if (!target) return alert('الحساب غير موجود.');
         const saved = String(target.password || target.pass || '').trim();
@@ -3237,7 +3263,8 @@
     window.handleLogout = async function() {
       const uid = window.currentUser.id;
       localStorage.removeItem(PERSIST_SESSION_KEY);
-      if (heartbeatTimer) clearInterval(heartbeatTimer);
+      if (heartbeatTimer) { clearInterval(heartbeatTimer); heartbeatTimer = null; }
+      unbindFirebaseListeners();
       if (uid) {
         try { await db.collection("user_accounts").doc(uid).update({ isOnline: false, activeSessionDeviceId: null, lastActivePing: 0 }); } catch (e) {}
       }
@@ -3271,12 +3298,9 @@
 
       try {
         const hPwd = await hashPassword(pwdInput.trim());
-        const snap = await db.collection("user_accounts").get();
+        const snap = await db.collection("user_accounts").where("email", "==", cleanEm).limit(1).get();
         let mDoc = null;
-        snap.forEach(d => {
-          const u = d.data();
-          if (String(u.email || '').toLowerCase().trim() === cleanEm) mDoc = { id: d.id, ...u };
-        });
+        snap.forEach(d => { mDoc = { id: d.id, ...d.data() }; });
         if (!mDoc) return alert("لم يتم العثور على الحساب.");
         const saved = String(mDoc.password || mDoc.pass || '').trim();
         if (saved && saved !== hPwd && saved !== pwdInput.trim()) return alert("كلمة المرور غير صحيحة.");
@@ -5487,9 +5511,33 @@
       const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = `SYSCON_Backup_${new Date().toLocaleDateString('en-GB').replace(/\//g, '-')}.json`; a.click();
     };
 
+    async function loadAuditLogsOnDemand() {
+      const tbody = document.getElementById('auditLogsTableBody');
+      const emptyEl = document.getElementById('emptyAuditState');
+      if (!tbody || !emptyEl || typeof db === 'undefined') return;
+      tbody.innerHTML = '<tr><td colspan="4" class="py-6 text-center text-sky-400 font-bold">جاري تحميل سجل الرقابة...</td></tr>';
+      emptyEl.classList.add('hidden');
+      try {
+        const snap = await db.collection("system_audit_logs").orderBy("timestamp", "desc").limit(100).get();
+        const logs = [];
+        snap.forEach(d => logs.push({ id: d.id, ...d.data() }));
+        if (logs.length === 0) { tbody.innerHTML = ''; emptyEl.classList.remove('hidden'); return; }
+        emptyEl.classList.add('hidden');
+        tbody.innerHTML = logs.map(l => `<tr class="hover:bg-slate-800/40">
+          <td class="py-2 px-3 font-mono text-[11px] text-slate-400">${escapeHtml(l.dateString || '-')}</td>
+          <td class="py-2 px-3 font-bold text-emerald-400">${escapeHtml(l.performedBy || '-')}</td>
+          <td class="py-2 px-3"><span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-950 text-amber-300 border border-amber-800">${escapeHtml(l.actionType || '-')}</span></td>
+          <td class="py-2 px-3 text-slate-200">${escapeHtml(l.details || '-')}</td>
+        </tr>`).join('');
+      } catch (e) {
+        tbody.innerHTML = `<tr><td colspan="4" class="py-6 text-center text-rose-400 font-bold">تعذر تحميل السجل: ${escapeHtml(e.message || '')}</td></tr>`;
+      }
+    }
+
     window.openAuditLogsModal = function() {
       if (!isMasterAdmin() && !hasPerm('canViewAuditLogs')) return alert('غير مصرح.');
       const m = document.getElementById('auditLogsModal'); m.classList.remove('hidden'); m.classList.add('flex'); refreshIcons();
+      loadAuditLogsOnDemand();
     };
     window.closeAuditLogsModal = function() { const m = document.getElementById('auditLogsModal'); m.classList.add('hidden'); m.classList.remove('flex'); };
 
@@ -6249,10 +6297,83 @@
       if (window.currentUser.activeViewMode === 'engineer') renderMyEngineerSheets();
     }
 
-    function bindFirebaseListeners() {
-      if (typeof db === 'undefined') return;
+    function bindMaintenanceListener() {
+      if (typeof db === 'undefined' || maintenanceListenerBound) return;
+      maintenanceListenerBound = true;
+      db.collection("system_config").doc(MAINT_DOC_ID).onSnapshot(doc => {
+        const d = doc.exists ? doc.data() : { isUnderMaintenance: false };
+        isUnderMaintenance = Boolean(d && d.isUnderMaintenance === true);
+        if (isUnderMaintenance && !isMasterAdmin() && !isMaintenanceBypassed) {
+          renderMaintenanceOverlay(true, d.maintenanceMessage, d.updatedAtStr);
+        } else {
+          renderMaintenanceOverlay(false);
+        }
+      }, () => {});
+    }
 
-      db.collection("clearance_sheets").onSnapshot(snap => {
+    function applyOwnUserDocUpdate(me) {
+      if (!window.currentUser.id) return;
+      if (!me) { window.handleLogout(); return; }
+      if (me.isOnline === false && me.activeSessionDeviceId === null && me.forceLogoutCommandAt) {
+        window.handleLogout();
+        return;
+      }
+      const _meRoleKey = isMasterAdmin(me.email) ? 'admin' : (isTechnicianStaffRole(me.role, me.jobTitle) ? 'technician' : me.role);
+      window.currentUser.permissions = Object.assign({}, getRoleTemplate(_meRoleKey), me.permissions || {});
+      window.currentUser.jobTitle = getJobTitle(me.email, me.role, me.jobTitle);
+      document.getElementById('headerUserRole').textContent = window.currentUser.jobTitle;
+      saveSession();
+      applyRoleUI();
+    }
+
+    function processUsersSnapshot(snap) {
+      const users = [];
+      snap.forEach(doc => {
+        const data = { id: doc.id, ...doc.data() };
+        if (doc.id === BOM_DOC_ID && data.pricesMap) {
+          Object.assign(SYSTEM_MATERIALS_PRICES, data.pricesMap);
+          populateMaterialsDropdown();
+        } else if (doc.id === ADV_DOC_ID && Array.isArray(data.advances)) {
+          window.sysconCashAdvancesList = data.advances;
+        } else if (doc.id === MP_DOC_ID && data.mpJson) {
+          try {
+            const arr = JSON.parse(data.mpJson);
+            if (Array.isArray(arr) && JSON.stringify(arr) !== JSON.stringify(window.mpRawData)) {
+              syncingMp = true;
+              window.mpRawData = arr;
+              localStorage.setItem(MP_STORAGE_KEY, data.mpJson);
+              populateMpDropdowns();
+              if (window.currentUser.activeViewMode === 'manpower') applyManpowerFilters();
+              syncingMp = false;
+            }
+          } catch (e) { syncingMp = false; }
+        } else if (!data.isSystemConfigDoc) {
+          users.push(data);
+        }
+      });
+      window.cachedUsersList = users;
+
+      if (window.currentUser.id) {
+        const me = users.find(u => u.id === window.currentUser.id);
+        if (users.length > 0 && !me) { window.handleLogout(); return; }
+        if (me) applyOwnUserDocUpdate(me);
+      }
+
+      renderEngineersDirectoryTable();
+      renderAllViews();
+    }
+
+    function unbindFirebaseListeners() {
+      activeDataUnsubscribers.forEach(fn => { try { if (typeof fn === 'function') fn(); } catch (e) {} });
+      activeDataUnsubscribers = [];
+      dataListenersBound = false;
+    }
+
+    function bindFirebaseListeners() {
+      if (typeof db === 'undefined' || !window.currentUser.id || dataListenersBound) return;
+      dataListenersBound = true;
+
+      const unsubClearances = db.collection("clearance_sheets").onSnapshot(snap => {
         const list = [];
         snap.forEach(doc => list.push({ id: doc.id, ...doc.data() }));
         list.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
@@ -6272,85 +6393,31 @@
           const updated = list.find(x => x.id === currentReviewItem.id);
           if (updated && !typing) openClearanceReview(updated.id, false);
         }
-      });
+      }, () => {});
+      activeDataUnsubscribers.push(unsubClearances);
 
-      db.collection("engineer_notifications").onSnapshot(snap => {
+      const unsubNotifs = db.collection("engineer_notifications").orderBy("timestamp", "desc").limit(150).onSnapshot(snap => {
         const list = [];
         snap.forEach(doc => list.push({ id: doc.id, ...doc.data() }));
         list.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
         window.cachedNotificationsList = list;
         renderNotificationsUI();
-      });
+      }, () => {});
+      activeDataUnsubscribers.push(unsubNotifs);
 
-      db.collection("user_accounts").onSnapshot(snap => {
-        const users = [];
-        snap.forEach(doc => {
-          const data = { id: doc.id, ...doc.data() };
-          if (doc.id === BOM_DOC_ID && data.pricesMap) {
-            Object.assign(SYSTEM_MATERIALS_PRICES, data.pricesMap);
-            populateMaterialsDropdown();
-          } else if (doc.id === ADV_DOC_ID && Array.isArray(data.advances)) {
-            window.sysconCashAdvancesList = data.advances;
-          } else if (doc.id === MP_DOC_ID && data.mpJson) {
-            try {
-              const arr = JSON.parse(data.mpJson);
-              if (Array.isArray(arr) && JSON.stringify(arr) !== JSON.stringify(window.mpRawData)) {
-                syncingMp = true;
-                window.mpRawData = arr;
-                localStorage.setItem(MP_STORAGE_KEY, data.mpJson);
-                populateMpDropdowns();
-                if (window.currentUser.activeViewMode === 'manpower') applyManpowerFilters();
-                syncingMp = false;
-              }
-            } catch (e) { syncingMp = false; }
-          } else if (!data.isSystemConfigDoc) {
-            users.push(data);
-          }
-        });
-        window.cachedUsersList = users;
-
-        if (window.currentUser.id) {
-          const me = users.find(u => u.id === window.currentUser.id);
-          if (users.length > 0 && !me) { window.handleLogout(); return; }
-          if (!me) return;
-          if (me.isOnline === false && me.activeSessionDeviceId === null && me.forceLogoutCommandAt) { window.handleLogout(); return; }
-          const _meRoleKey = isMasterAdmin(me.email) ? 'admin' : (isTechnicianStaffRole(me.role, me.jobTitle) ? 'technician' : me.role);
-          window.currentUser.permissions = Object.assign({}, getRoleTemplate(_meRoleKey), me.permissions || {});
-          window.currentUser.jobTitle = getJobTitle(me.email, me.role, me.jobTitle);
-          document.getElementById('headerUserRole').textContent = window.currentUser.jobTitle;
-          saveSession();
-          applyRoleUI();
-        }
-
-        renderEngineersDirectoryTable();
-        renderAllViews();
-      });
-
-      db.collection("system_audit_logs").orderBy("timestamp", "desc").limit(100).onSnapshot(snap => {
-        const logs = [];
-        snap.forEach(d => logs.push({ id: d.id, ...d.data() }));
-        const tbody = document.getElementById('auditLogsTableBody');
-        const emptyEl = document.getElementById('emptyAuditState');
-        if (!tbody || !emptyEl) return;
-        if (logs.length === 0) { tbody.innerHTML = ''; emptyEl.classList.remove('hidden'); return; }
-        emptyEl.classList.add('hidden');
-        tbody.innerHTML = logs.map(l => `<tr class="hover:bg-slate-800/40">
-          <td class="py-2 px-3 font-mono text-[11px] text-slate-400">${escapeHtml(l.dateString || '-')}</td>
-          <td class="py-2 px-3 font-bold text-emerald-400">${escapeHtml(l.performedBy || '-')}</td>
-          <td class="py-2 px-3"><span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-950 text-amber-300 border border-amber-800">${escapeHtml(l.actionType || '-')}</span></td>
-          <td class="py-2 px-3 text-slate-200">${escapeHtml(l.details || '-')}</td>
-        </tr>`).join('');
-      });
-
-      db.collection("system_config").doc(MAINT_DOC_ID).onSnapshot(doc => {
-        const d = doc.exists ? doc.data() : { isUnderMaintenance: false };
-        isUnderMaintenance = Boolean(d && d.isUnderMaintenance === true);
-        if (isUnderMaintenance && !isMasterAdmin() && !isMaintenanceBypassed) {
-          renderMaintenanceOverlay(true, d.maintenanceMessage, d.updatedAtStr);
-        } else {
-          renderMaintenanceOverlay(false);
-        }
-      });
+      const needsLiveUsers = isMasterAdmin() || hasPerm('canManageUsers') || hasPerm('canViewEngineersDir') || hasPerm('canViewManpower');
+      if (needsLiveUsers) {
+        const unsubUsers = db.collection("user_accounts").onSnapshot(processUsersSnapshot, () => {});
+        activeDataUnsubscribers.push(unsubUsers);
+      } else {
+        db.collection("user_accounts").get().then(processUsersSnapshot).catch(() => {});
+        const unsubMe = db.collection("user_accounts").doc(window.currentUser.id).onSnapshot(doc => {
+          if (!window.currentUser.id) return;
+          if (!doc.exists) { window.handleLogout(); return; }
+          applyOwnUserDocUpdate({ id: doc.id, ...doc.data() });
+        }, () => {});
+        activeDataUnsubscribers.push(unsubMe);
+      }
     }
 
     // 15. التشغيل الأولي
@@ -6374,7 +6441,7 @@
 
       if (checkPublicQrVerifyRoute()) return;
 
-      bindFirebaseListeners();
+      bindMaintenanceListener();
       restoreSession();
       applyRoleUI();
     });
@@ -6386,9 +6453,12 @@
     window.saveEngineerFormDraft = saveDraft;
     window.hashSysconPassword = hashPassword;
     window.applySysconRoleUI = applyRoleUI;
+    window.startSysconDataListeners = bindFirebaseListeners;
+    window.stopSysconDataListeners = unbindFirebaseListeners;
     window.startSysconHeartbeat = startHeartbeat;
     window.stopSysconHeartbeat = function() {
       if (heartbeatTimer) { clearInterval(heartbeatTimer); heartbeatTimer = null; }
+      lastHeartbeatSentAt = 0;
     };
     window.renderAllSysconViews = renderAllViews;
     window.renderSysconWeeklyChart = renderWeeklyChart;
@@ -6533,6 +6603,9 @@
 
     if (typeof window.stopSysconHeartbeat === 'function') {
       window.stopSysconHeartbeat();
+    }
+    if (typeof window.stopSysconDataListeners === 'function') {
+      window.stopSysconDataListeners();
     }
     localStorage.removeItem(PERSIST_KEY);
 
@@ -6726,7 +6799,8 @@
         overlay.classList.remove('flex');
       }
 
-      if (typeof window.startSysconHeartbeat === 'function') window.startSysconHeartbeat();
+      if (typeof window.startSysconDataListeners === 'function') window.startSysconDataListeners();
+      if (typeof window.startSysconHeartbeat === 'function') window.startSysconHeartbeat(true);
       if (typeof window.applySysconRoleUI === 'function') window.applySysconRoleUI();
       if (typeof window.setAppMode === 'function') window.setAppMode(initView);
       if (typeof window.renderAllSysconViews === 'function') window.renderAllSysconViews();
