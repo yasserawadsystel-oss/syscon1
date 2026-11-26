@@ -869,6 +869,7 @@
             <option value="READY_HR">جاهز للطباعة / المالية HR</option>
             <option value="DELIVERED">مؤرشفة ومُسلّمة للحسابات</option>
             <option value="REJECTED">مرجعة للتعديل</option>
+            <option value="DUPLICATES_ONLY">⚠️ تنبيهات تكرار / مطابقة</option>
           </select>
 
           <select id="filterStatus" onchange="if(this.value!=='ALL'){const fp=document.getElementById('filterPendingStage');if(fp)fp.value='ALL';} renderLeaderDashboard();" class="sys-input px-3 py-2">
@@ -1035,6 +1036,7 @@
             <option value="READY_HR">جاهز للطباعة / المالية HR</option>
             <option value="DELIVERED">مؤرشفة ومُسلّمة للحسابات</option>
             <option value="REJECTED">مرجعة للتعديل</option>
+            <option value="DUPLICATES_ONLY">⚠️ تنبيهات تكرار / مطابقة</option>
           </select>
 
           <select id="techStaffFilterStatus" onchange="if(this.value!=='ALL'){const fp=document.getElementById('techStaffFilterPendingStage');if(fp)fp.value='ALL';} renderTechniciansSectionDashboard();" class="sys-input px-3 py-2">
@@ -1500,6 +1502,35 @@
               <i data-lucide="scale" class="lucide-lg text-emerald-400"></i>
             </div>
           </div>
+
+          <!-- التبرير الإلزامي عند تكرار زيارة نفس الموقع خلال آخر 5 أيام -->
+          <div id="repeatVisitJustificationBox" class="hidden bg-amber-950/30 border-2 border-amber-500/70 rounded-2xl p-4 space-y-3 text-xs">
+            <div class="flex items-start gap-2.5">
+              <div class="w-8 h-8 rounded-xl bg-amber-500/20 border border-amber-500/50 text-amber-300 flex items-center justify-center shrink-0 font-black">!</div>
+              <div class="space-y-0.5">
+                <div class="font-black text-amber-300 text-xs">تبرير إلزامي: تم رفع تصفية لنفس الموقع خلال آخر 5 أيام</div>
+                <div id="repeatVisitRecentInfo" class="text-[11px] text-slate-300 leading-relaxed"></div>
+              </div>
+            </div>
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <label class="block font-bold text-amber-200 mb-1">سبب تكرار الزيارة للموقع (إلزامي) *</label>
+                <select id="engRepeatVisitCategory" onchange="saveEngineerFormDraft()" class="sys-input w-full px-3 py-2 font-bold border-amber-500/50">
+                  <option value="">-- اختر سبب الزيارة المتكررة --</option>
+                  <option value="استكمال شغل">استكمال شغل (أيام متتالية)</option>
+                  <option value="عطل فني">عطل فني / صيانة طارئة</option>
+                  <option value="زيارة إضافية Extra">زيارة إضافية Extra</option>
+                  <option value="مشكلة Access">مشكلة Access / تصاريح</option>
+                  <option value="أخرى">أخرى (يرجى التوضيح)</option>
+                </select>
+              </div>
+              <div>
+                <label class="block font-bold text-slate-300 mb-1">توضيح مختصر للسبب (يظهر للمراجع)</label>
+                <input type="text" id="engRepeatVisitNote" oninput="saveEngineerFormDraft()" placeholder="مثال: استكمال تركيب الانتنات لليوم الثاني..." class="sys-input w-full px-3 py-2">
+              </div>
+            </div>
+          </div>
+
           <div class="pt-2 flex flex-wrap justify-between gap-2">
             <button type="button" onclick="goToStep(3)" class="sys-btn bg-slate-800 hover:bg-slate-700 text-slate-300">
               <i data-lucide="arrow-right" class="lucide-inline"></i><span>السابق</span>
@@ -1976,6 +2007,8 @@
           </button>
         </div>
       </div>
+
+      <div id="modalDuplicateRadarBanner" class="hidden no-print px-4 py-3 border-b text-xs space-y-2" dir="rtl"></div>
 
       <div id="sheetScrollWrapper" class="overflow-x-auto p-2 md:p-4 bg-slate-200/70 flex justify-center">
         <div id="printableSheet" class="official-sheet-container">
@@ -3651,7 +3684,9 @@
         if (!withinDateRange(s, fromV, toV)) return false;
         const st = String(s.status || 'PENDING').toUpperCase();
         if (stF !== 'ALL' && st !== stF) return false;
-        if (stageF !== 'ALL' && getClearanceStageKey(s) !== stageF) return false;
+        if (stageF === 'DUPLICATES_ONLY') {
+          if (!window.SysconDuplicateRadar || !window.SysconDuplicateRadar.hasAlert(s)) return false;
+        } else if (stageF !== 'ALL' && getClearanceStageKey(s) !== stageF) return false;
         if (deptF !== 'ALL' && s.department !== deptF) return false;
         if (engF !== 'all') {
           const sub = String(s.submittedByEngineer || '').toLowerCase().trim();
@@ -4018,6 +4053,15 @@
         txt.textContent = 'تصفية مطابقة: 0.00 ج.م';
         banner.className = 'p-4 rounded-xl border border-sky-500/40 bg-sky-950/20 flex items-center justify-between text-sky-400';
       }
+
+      if (window.SysconDuplicateRadar && typeof window.SysconDuplicateRadar.updateStep4JustificationUI === 'function') {
+        window.SysconDuplicateRadar.updateStep4JustificationUI({
+          id: editingRejectedSheetId || '__NEW_CANDIDATE__',
+          siteName: site,
+          startDate: sDate,
+          endDate: eDate
+        }, editingRejectedSheetId);
+      }
     }
 
     function saveDraft() {
@@ -4036,6 +4080,8 @@
           endDate: document.getElementById('engEndDate')?.value || '',
           advanceAmount: document.getElementById('engAdvanceAmount')?.value || 5500,
           returnedMaterials: document.getElementById('engReturnedMaterialsInput')?.value || '',
+          repeatVisitReasonCategory: document.getElementById('engRepeatVisitCategory')?.value || '',
+          repeatVisitReasonNote: document.getElementById('engRepeatVisitNote')?.value || '',
           items: engineerCurrentItems,
           materials: engineerCurrentMaterials
         }));
@@ -4059,6 +4105,8 @@
         if (d.endDate) document.getElementById('engEndDate').value = d.endDate;
         if (d.advanceAmount !== undefined) document.getElementById('engAdvanceAmount').value = d.advanceAmount;
         if (d.returnedMaterials) document.getElementById('engReturnedMaterialsInput').value = d.returnedMaterials;
+        if (d.repeatVisitReasonCategory && document.getElementById('engRepeatVisitCategory')) document.getElementById('engRepeatVisitCategory').value = d.repeatVisitReasonCategory;
+        if (d.repeatVisitReasonNote && document.getElementById('engRepeatVisitNote')) document.getElementById('engRepeatVisitNote').value = d.repeatVisitReasonNote;
         if (Array.isArray(d.items)) { engineerCurrentItems = d.items; renderEngItemsTable(); }
         if (Array.isArray(d.materials)) { engineerCurrentMaterials = d.materials; renderEngMaterialsTable(); }
         calcEngTotals();
@@ -4091,6 +4139,10 @@
       document.getElementById('engLayoutRef').value = s.layoutRef || 'OK';
       document.getElementById('engAdvanceAmount').value = s.advanceAmount || 0;
       document.getElementById('engReturnedMaterialsInput').value = s.returnedMaterials || '';
+      const rvCatEl = document.getElementById('engRepeatVisitCategory');
+      const rvNoteEl = document.getElementById('engRepeatVisitNote');
+      if (rvCatEl) rvCatEl.value = s.repeatVisitReasonCategory || '';
+      if (rvNoteEl) rvNoteEl.value = s.repeatVisitReasonNote || '';
 
       populateLeadersSelect();
       const lSel = document.getElementById('engLeaderName');
@@ -4128,6 +4180,11 @@
       document.getElementById('btnSubmitEngineerClearanceText').innerText = 'إرسال التصفية';
       engineerCurrentItems = [];
       engineerCurrentMaterials = [];
+      const rvCatReset = document.getElementById('engRepeatVisitCategory');
+      const rvNoteReset = document.getElementById('engRepeatVisitNote');
+      if (rvCatReset) rvCatReset.value = '';
+      if (rvNoteReset) rvNoteReset.value = '';
+      document.getElementById('repeatVisitJustificationBox')?.classList.add('hidden');
       renderEngItemsTable();
       renderEngMaterialsTable();
       calcEngTotals();
@@ -4194,6 +4251,49 @@
 
       const isTechSubmitter = isTechnicianStaffRole(window.currentUser.role, window.currentUser.jobTitle) || window._creatingForTechnicianSection === true;
 
+      const repeatVisitReasonCategory = (document.getElementById('engRepeatVisitCategory')?.value || '').trim();
+      const repeatVisitReasonNote = (document.getElementById('engRepeatVisitNote')?.value || '').trim();
+      const repeatVisitReasonText = repeatVisitReasonCategory
+        ? (repeatVisitReasonNote ? `${repeatVisitReasonCategory} — ${repeatVisitReasonNote}` : repeatVisitReasonCategory)
+        : repeatVisitReasonNote;
+
+      if (window.SysconDuplicateRadar && typeof window.SysconDuplicateRadar.analyzeCandidate === 'function') {
+        const candidateObj = {
+          id: editingRejectedSheetId || '__NEW_CANDIDATE__',
+          siteName, startDate, endDate, department, activityType, teamMembers, items,
+          engineerUserId: window.currentUser.id || '',
+          engineerEmail: String(window.currentUser.email || '').toLowerCase(),
+          submittedByEngineer: window.currentUser.name || ''
+        };
+        const dupRes = window.SysconDuplicateRadar.analyzeCandidate(candidateObj, editingRejectedSheetId);
+
+        // المنع الوحيد عند الإرسال: نفس المهندس/الفني يحاول إرسال نفس الموقع في نفس اليوم (تداخل تاريخ)
+        const sameSiteSameDay = dupRes.high.find(x => x.kind === 'SAME_USER_DATE_OVERLAP');
+        if (sameSiteSameDay) {
+          alert(`⛔ تحذير — تم منع إرسال التصفية المكررة!\n\nأنت رافع بالفعل تصفية لنفس الموقع (${sameSiteSameDay.sharedSites.join(' + ')}) في نفس اليوم (${sameSiteSameDay.overlapText}) بكود (${sameSiteSameDay.otherCode}) عن الفترة (${sameSiteSameDay.otherDates}).\n\nملاحظة: لو نزلت نفس الموقع يوم جديد متتالي بنفس الفنيين، ده مسموح تماماً — فقط عدّل تاريخ البدء والانتهاء ليكون اليوم الجديد بدون تكرار أيام التصفية السابقة.`);
+          return goToStep(2);
+        }
+
+        // التبرير الإلزامي عند وجود زيارة لنفس الموقع خلال آخر 5 أيام (بدون منع الأيام المتتالية)
+        const recentVisits = typeof window.SysconDuplicateRadar.checkRecentSiteVisits === 'function'
+          ? window.SysconDuplicateRadar.checkRecentSiteVisits(candidateObj, editingRejectedSheetId)
+          : [];
+        if (recentVisits.length > 0) {
+          window.SysconDuplicateRadar.updateStep4JustificationUI(candidateObj, editingRejectedSheetId);
+          if (!repeatVisitReasonCategory) {
+            alert(`⚠️ تبرير إلزامي:\nتم رفع تصفية لنفس الموقع خلال آخر 5 أيام (${recentVisits[0].otherCode} بتاريخ ${recentVisits[0].otherDates}).\nيرجى اختيار «سبب تكرار الزيارة للموقع» قبل الإرسال.`);
+            document.getElementById('engRepeatVisitCategory')?.focus();
+            return;
+          }
+          if (repeatVisitReasonCategory === 'أخرى' && repeatVisitReasonNote.length < 3) {
+            alert('يرجى كتابة توضيح مختصر لسبب تكرار الزيارة في خانة التوضيح.');
+            document.getElementById('engRepeatVisitNote')?.focus();
+            return;
+          }
+        }
+        // باقي الحالات (تكرار فاتورة / ازدواج فني / مهندس آخر) لا تمنع الإرسال وتظهر كتحذير للمراجع وعند الاعتماد فقط
+      }
+
       try {
         if (editingRejectedSheetId) {
           const oldDoc = window.cachedClearancesList.find(x => x.id === editingRejectedSheetId);
@@ -4205,6 +4305,7 @@
             siteName, region, sectorZone: sector, department, activityType, teamCode, teamName,
             teamMembers, teamLeader, teamLeaderId, teamLeaderEmail,
             startDate, startTime, endDate, endTime, siteBook, layoutRef, advanceAmount, returnedMaterials,
+            repeatVisitReasonCategory, repeatVisitReasonNote, repeatVisitReasonText,
             sheetNumber: code, clearanceName: fullTitle,
             status: "pending", isApproved: false, isRejected: false,
             sheetType: isSelfLeader ? 'LEADER_DIRECT' : 'NORMAL',
@@ -4238,6 +4339,7 @@
           siteName, region, sectorZone: sector, department, activityType, teamCode, teamName,
           teamMembers, teamLeader, teamLeaderId, teamLeaderEmail,
           startDate, startTime, endDate, endTime, siteBook, layoutRef, advanceAmount, returnedMaterials,
+          repeatVisitReasonCategory, repeatVisitReasonNote, repeatVisitReasonText,
           engineerUserId: window.currentUser.id || '',
           engineerEmail: String(window.currentUser.email || '').toLowerCase(),
           submittedByEngineer: window.currentUser.name || (isTechSheet ? 'فني' : 'مهندس موقع'),
@@ -4262,6 +4364,11 @@
         engineerCurrentItems = [];
         engineerCurrentMaterials = [];
         currentDraftReceiptBase64 = '';
+        const rvCatClr = document.getElementById('engRepeatVisitCategory');
+        const rvNoteClr = document.getElementById('engRepeatVisitNote');
+        if (rvCatClr) rvCatClr.value = '';
+        if (rvNoteClr) rvNoteClr.value = '';
+        document.getElementById('repeatVisitJustificationBox')?.classList.add('hidden');
         localStorage.removeItem("systel_eng_draft_v4");
         renderEngItemsTable();
         renderEngMaterialsTable();
@@ -4429,26 +4536,51 @@
       if (!hasPerm('canApproveTechnical')) return alert('غير مصرح لك بالاعتماد الفني.');
       const s = window.cachedClearancesList.find(x => x.id === sheetId) || currentReviewItem;
       if (!s) return;
-      const approver = `${window.currentUser.name || 'الإدارة الفنية'} (${window.currentUser.jobTitle || 'فنية'})`;
-      const now = new Date();
-      const dateStr = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')} - ${now.toLocaleDateString('en-GB')}`;
 
-      try {
-        await db.collection("clearance_sheets").doc(s.id).update({
-          technicalApproved: true, technicalApprovedBy: approver,
-          technicalApprovalDate: dateStr, technicalApprovalTimestamp: Date.now(),
-          technicalReturnReason: null, returnedByTechnical: false,
-          readyForCoo: true
-        });
-        s.technicalApproved = true; s.technicalApprovedBy = approver; s.technicalApprovalDate = dateStr; s.technicalReturnReason = null; s.returnedByTechnical = false;
-        logAudit("اعتماد الإدارة الفنية", `التصفية: ${getFullDisplayName(s)} بواسطة ${approver}`);
-        await sendNotif({ targetUserId: s.engineerUserId, targetEmail: s.engineerEmail, targetName: s.submittedByEngineer, siteName: getFullDisplayName(s), sheetId: s.id, actionTitle: "اعتماد الإدارة الفنية", message: `تم اعتماد مطابقة الفنيين للتصفية (${getFullDisplayName(s)}) بواسطة ${approver}.` });
-        await sendNotif({ targetRole: 'coo', siteName: getFullDisplayName(s), sheetId: s.id, actionTitle: "تصفية جاهزة لاعتماد COO", message: `تمت الموافقة الفنية على تصفية (${getFullDisplayName(s)}) وبانتظار اعتماد COO.` });
-        alert('تم الاعتماد الفني بنجاح.');
-        if (currentReviewItem && currentReviewItem.id === s.id) openClearanceReview(s.id, true);
-        renderTechnicalDashboard();
-        renderHrDashboard();
-      } catch (e) { alert('خطأ: ' + e.message); }
+      const executeTechnicalApprove = async (overrideSummary) => {
+        const approver = `${window.currentUser.name || 'الإدارة الفنية'} (${window.currentUser.jobTitle || 'فنية'})`;
+        const now = new Date();
+        const dateStr = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')} - ${now.toLocaleDateString('en-GB')}`;
+
+        try {
+          const upd = {
+            technicalApproved: true, technicalApprovedBy: approver,
+            technicalApprovalDate: dateStr, technicalApprovalTimestamp: Date.now(),
+            technicalReturnReason: null, returnedByTechnical: false,
+            readyForCoo: true
+          };
+          if (overrideSummary) {
+            upd.technicalApprovedWithWarnings = true;
+            upd.technicalWarningOverrideSummary = overrideSummary;
+          }
+          await db.collection("clearance_sheets").doc(s.id).update(upd);
+          s.technicalApproved = true; s.technicalApprovedBy = approver; s.technicalApprovalDate = dateStr; s.technicalReturnReason = null; s.returnedByTechnical = false;
+          if (overrideSummary) {
+            s.technicalApprovedWithWarnings = true;
+            s.technicalWarningOverrideSummary = overrideSummary;
+            logAudit("⚠️ اعتماد فني رغم التحذيرات", `التصفية: ${getFullDisplayName(s)} بواسطة ${approver} • أسباب التحذير: ${overrideSummary}`);
+          } else {
+            logAudit("اعتماد الإدارة الفنية", `التصفية: ${getFullDisplayName(s)} بواسطة ${approver}`);
+          }
+          await sendNotif({ targetUserId: s.engineerUserId, targetEmail: s.engineerEmail, targetName: s.submittedByEngineer, siteName: getFullDisplayName(s), sheetId: s.id, actionTitle: "اعتماد الإدارة الفنية", message: `تم اعتماد مطابقة الفنيين للتصفية (${getFullDisplayName(s)}) بواسطة ${approver}.` });
+          await sendNotif({ targetRole: 'coo', siteName: getFullDisplayName(s), sheetId: s.id, actionTitle: "تصفية جاهزة لاعتماد COO", message: `تمت الموافقة الفنية على تصفية (${getFullDisplayName(s)}) وبانتظار اعتماد COO.` });
+          alert('تم الاعتماد الفني بنجاح.');
+          if (currentReviewItem && currentReviewItem.id === s.id) openClearanceReview(s.id, true);
+          renderTechnicalDashboard();
+          renderHrDashboard();
+        } catch (e) { alert('خطأ: ' + e.message); }
+      };
+
+      if (window.SysconDuplicateRadar && typeof window.SysconDuplicateRadar.guardApproval === 'function') {
+        window.SysconDuplicateRadar.guardApproval(
+          s,
+          'TECHNICAL',
+          executeTechnicalApprove,
+          () => returnTechnicalClearanceToLeader(s.id)
+        );
+      } else {
+        executeTechnicalApprove(null);
+      }
     };
 
     window.returnTechnicalClearanceToLeader = async function(sheetId) {
@@ -4593,7 +4725,7 @@
 
         return `
           <tr class="hover:bg-slate-800/40">
-            <td class="py-3 px-4 font-bold text-white font-mono">${escapeHtml(getFullDisplayName(s))}<div class="text-[10px] text-slate-400">${escapeHtml(s.region || '-')}</div></td>
+            <td class="py-3 px-4 font-bold text-white font-mono">${escapeHtml(getFullDisplayName(s))}<div class="text-[10px] text-slate-400">${escapeHtml(s.region || '-')}</div>${window.SysconDuplicateRadar ? window.SysconDuplicateRadar.getTableBadgeHtml(s) : ''}</td>
             <td class="py-3 px-4 text-sky-300 font-bold">${escapeHtml(s.department || '-')}<div class="text-[10px] text-slate-400 font-normal">${escapeHtml(s.activityType || '-')}</div></td>
             <td class="py-3 px-4"><div class="font-bold text-white">${escapeHtml(s.submittedByEngineer || '-')}${isTechnicianClearance(s) ? ' <span class="px-1.5 py-0.5 rounded bg-teal-950 text-teal-300 border border-teal-700 text-[9px] font-black">فني</span>' : ''}</div><div class="text-[10px] text-amber-300 font-bold">${escapeHtml(s.teamLeader || '-')}</div></td>
             <td class="py-3 px-4 font-bold text-white font-mono">${adv.toLocaleString()} ج.م</td>
@@ -4886,6 +5018,9 @@
         leftBox.prepend(bR);
       }
 
+      if (window.SysconDuplicateRadar && typeof window.SysconDuplicateRadar.renderModalBanner === 'function') {
+        window.SysconDuplicateRadar.renderModalBanner(d);
+      }
       applyPrintPermissionsToModal();
       const modal = document.getElementById('clearanceModal');
       modal.classList.remove('hidden'); modal.classList.add('flex');
@@ -5006,57 +5141,114 @@
 
     window.saveAndApproveClearance = async function() {
       if (!currentReviewItem || !hasPerm('canApproveClearance')) return alert('غير مصرح.');
-      const now = new Date();
-      const dateStr = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')} ${now.toLocaleDateString('en-GB')}`;
-      const site = (document.getElementById('m_siteName').value || currentReviewItem.siteName || '').trim();
-      const reg = (document.getElementById('m_region').value || currentReviewItem.region || '').trim();
+      const targetSheet = currentReviewItem;
+      const site = (document.getElementById('m_siteName').value || targetSheet.siteName || '').trim();
+      const reg = (document.getElementById('m_region').value || targetSheet.region || '').trim();
       const cleanItems = reviewSheetItems.filter(x => (parseFloat(x.amount) || 0) > 0);
-      const approver = window.currentUser.name || currentReviewItem.teamLeader || 'م. ياسر عواد';
-      const code = getFormattedCode(currentReviewItem);
-      const full = `${site} - ${code}`;
-
-      await db.collection("clearance_sheets").doc(currentReviewItem.id).update({
-        status: "APPROVED", isApproved: true, siteName: site, region: reg,
-        sheetNumber: code, clearanceName: full, items: cleanItems,
-        signatureData: "STAMP_APPROVED", approvalDate: dateStr,
-        approvedAtTimestamp: Date.now(), approvedBy: approver
+      const previewSheet = Object.assign({}, targetSheet, {
+        siteName: site, region: reg, items: cleanItems,
+        startDate: (document.getElementById('m_startDate')?.value || targetSheet.startDate || '').trim(),
+        endDate: (document.getElementById('m_endDate')?.value || targetSheet.endDate || '').trim()
       });
-      logAudit("اعتماد التصفية (APPROVED ✓)", `التصفية: ${full} بواسطة ${approver}`);
-      await sendNotif({ targetUserId: currentReviewItem.engineerUserId, targetEmail: currentReviewItem.engineerEmail, targetName: currentReviewItem.submittedByEngineer, siteName: full, sheetId: currentReviewItem.id, actionTitle: "اعتماد التصفية", message: `تم اعتماد التصفية (${full}) بواسطة (${approver}).` });
-      if (!isLeaderSelfClearance(currentReviewItem)) {
-        await sendNotif({ targetRole: 'technical', siteName: full, sheetId: currentReviewItem.id, actionTitle: "تصفية واردة للفحص الفني", message: `تم اعتماد تصفية (${full}) من التيم ليدر وهي بانتظار الفحص الفني.` });
+
+      const executeLeaderApprove = async (overrideSummary) => {
+        const now = new Date();
+        const dateStr = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')} ${now.toLocaleDateString('en-GB')}`;
+        const approver = window.currentUser.name || targetSheet.teamLeader || 'م. ياسر عواد';
+        const code = getFormattedCode(targetSheet);
+        const full = `${site} - ${code}`;
+        const upd = {
+          status: "APPROVED", isApproved: true, siteName: site, region: reg,
+          sheetNumber: code, clearanceName: full, items: cleanItems,
+          signatureData: "STAMP_APPROVED", approvalDate: dateStr,
+          approvedAtTimestamp: Date.now(), approvedBy: approver
+        };
+        if (overrideSummary) {
+          upd.leaderApprovedWithWarnings = true;
+          upd.leaderWarningOverrideSummary = overrideSummary;
+        }
+        await db.collection("clearance_sheets").doc(targetSheet.id).update(upd);
+        if (overrideSummary) {
+          logAudit("⚠️ اعتماد تيم ليدر رغم التحذيرات", `التصفية: ${full} بواسطة ${approver} • أسباب التحذير: ${overrideSummary}`);
+        } else {
+          logAudit("اعتماد التصفية (APPROVED ✓)", `التصفية: ${full} بواسطة ${approver}`);
+        }
+        await sendNotif({ targetUserId: targetSheet.engineerUserId, targetEmail: targetSheet.engineerEmail, targetName: targetSheet.submittedByEngineer, siteName: full, sheetId: targetSheet.id, actionTitle: "اعتماد التصفية", message: `تم اعتماد التصفية (${full}) بواسطة (${approver}).` });
+        if (!isLeaderSelfClearance(targetSheet)) {
+          await sendNotif({ targetRole: 'technical', siteName: full, sheetId: targetSheet.id, actionTitle: "تصفية واردة للفحص الفني", message: `تم اعتماد تصفية (${full}) من التيم ليدر وهي بانتظار الفحص الفني.` });
+        } else {
+          await sendNotif({ targetRole: 'coo', siteName: full, sheetId: targetSheet.id, actionTitle: "تصفية ليدر جاهزة لاعتماد COO", message: `تصفية مباشرة من التيم ليدر (${full}) جاهزة لاعتماد COO.` });
+        }
+        alert(`تم اعتماد (${full}) وختمها بـ APPROVED ✓.`);
+        openClearanceReview(targetSheet.id, false);
+      };
+
+      if (window.SysconDuplicateRadar && typeof window.SysconDuplicateRadar.guardApproval === 'function') {
+        window.SysconDuplicateRadar.guardApproval(
+          previewSheet,
+          'LEADER',
+          executeLeaderApprove,
+          () => cancelClearanceSheet(targetSheet.id)
+        );
       } else {
-        await sendNotif({ targetRole: 'coo', siteName: full, sheetId: currentReviewItem.id, actionTitle: "تصفية ليدر جاهزة لاعتماد COO", message: `تصفية مباشرة من التيم ليدر (${full}) جاهزة لاعتماد COO.` });
+        executeLeaderApprove(null);
       }
-      alert(`تم اعتماد (${full}) وختمها بـ APPROVED ✓.`);
-      openClearanceReview(currentReviewItem.id, false);
     };
 
     window.toggleApprovalRole = async function(role) {
       if (!currentReviewItem) return;
+      const targetSheet = currentReviewItem;
       const now = new Date();
       const dateStr = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')} ${now.toLocaleDateString('en-GB')}`;
-      const full = getFullDisplayName(currentReviewItem);
+      const full = getFullDisplayName(targetSheet);
 
       if (role === 'coo') {
         if (!hasPerm('canApproveCoo')) return alert('غير مصرح.');
-        const next = !currentReviewItem.cooApproved;
-        if (next && !isLeaderSelfClearance(currentReviewItem)) {
-          const stC = String(currentReviewItem.status || '').toUpperCase().trim();
-          const ldrOk = stC === 'APPROVED' || currentReviewItem.isApproved === true || Boolean(currentReviewItem.signatureData);
+        const next = !targetSheet.cooApproved;
+        if (next && !isLeaderSelfClearance(targetSheet)) {
+          const stC = String(targetSheet.status || '').toUpperCase().trim();
+          const ldrOk = stC === 'APPROVED' || targetSheet.isApproved === true || Boolean(targetSheet.signatureData);
           if (!ldrOk) return alert('لا يمكن اعتماد COO قبل اعتماد التيم ليدر أولاً.');
-          if (currentReviewItem.technicalApproved !== true) return alert('لا يمكن اعتماد COO قبل اعتماد الإدارة الفنية أولاً.');
+          if (targetSheet.technicalApproved !== true) return alert('لا يمكن اعتماد COO قبل اعتماد الإدارة الفنية أولاً.');
         }
-        const by = window.currentUser.name || 'م. محمد منير';
-        await db.collection("clearance_sheets").doc(currentReviewItem.id).update({
-          cooApproved: next, cooApprovedBy: next ? by : null, cooApprovalDate: next ? dateStr : null
-        });
-        currentReviewItem.cooApproved = next; currentReviewItem.cooApprovedBy = next ? by : null; currentReviewItem.cooApprovalDate = next ? dateStr : null;
-        if (next) {
-          await sendNotif({ targetRole: 'hr', siteName: full, sheetId: currentReviewItem.id, actionTitle: "تصفية معتمدة من COO", message: `تم اعتماد تصفية (${full}) من COO وهي جاهزة للطباعة والصرف المالي.` });
+
+        const executeCooToggle = async (overrideSummary) => {
+          const by = window.currentUser.name || 'م. محمد منير';
+          const upd = {
+            cooApproved: next, cooApprovedBy: next ? by : null, cooApprovalDate: next ? dateStr : null
+          };
+          if (next && overrideSummary) {
+            upd.cooApprovedWithWarnings = true;
+            upd.cooWarningOverrideSummary = overrideSummary;
+          }
+          await db.collection("clearance_sheets").doc(targetSheet.id).update(upd);
+          targetSheet.cooApproved = next; targetSheet.cooApprovedBy = next ? by : null; targetSheet.cooApprovalDate = next ? dateStr : null;
+          if (next) {
+            if (overrideSummary) {
+              targetSheet.cooApprovedWithWarnings = true;
+              targetSheet.cooWarningOverrideSummary = overrideSummary;
+              logAudit("⚠️ اعتماد COO رغم التحذيرات", `التصفية: ${full} بواسطة ${by} • أسباب التحذير: ${overrideSummary}`);
+            } else {
+              logAudit("اعتماد COO", `التصفية: ${full} بواسطة ${by}`);
+            }
+            await sendNotif({ targetRole: 'hr', siteName: full, sheetId: targetSheet.id, actionTitle: "تصفية معتمدة من COO", message: `تم اعتماد تصفية (${full}) من COO وهي جاهزة للطباعة والصرف المالي.` });
+          } else {
+            logAudit("إلغاء اعتماد COO", `التصفية: ${full} بواسطة ${by}`);
+          }
+          renderAllViews();
+          openClearanceReview(targetSheet.id, false);
+        };
+
+        if (next && window.SysconDuplicateRadar && typeof window.SysconDuplicateRadar.guardApproval === 'function') {
+          window.SysconDuplicateRadar.guardApproval(
+            targetSheet,
+            'COO',
+            executeCooToggle,
+            () => cancelClearanceSheet(targetSheet.id)
+          );
+        } else {
+          executeCooToggle(null);
         }
-        renderAllViews();
-        openClearanceReview(currentReviewItem.id, false);
       } else if (role === 'ceo') {
         if (!hasPerm('canApproveCeo')) return alert('غير مصرح.');
         const next = !currentReviewItem.ceoApproved;
@@ -6996,11 +7188,13 @@
       PENDING_COO: 0,
       READY_HR: 0,
       DELIVERED: 0,
-      REJECTED: 0
+      REJECTED: 0,
+      DUPLICATES_ONLY: 0
     };
     list.forEach(s => {
       const k = getStageKey(s);
       if (counts[k] !== undefined) counts[k]++;
+      if (window.SysconDuplicateRadar && window.SysconDuplicateRadar.hasAlert(s)) counts.DUPLICATES_ONLY++;
     });
     const labels = {
       ALL: `موقف الاعتماد: الكل (${counts.ALL})`,
@@ -7009,7 +7203,8 @@
       PENDING_COO: `واقف على اعتماد COO (${counts.PENDING_COO})`,
       READY_HR: `جاهز للطباعة / المالية HR (${counts.READY_HR})`,
       DELIVERED: `مؤرشفة ومُسلّمة للحسابات (${counts.DELIVERED})`,
-      REJECTED: `مرجعة للتعديل (${counts.REJECTED})`
+      REJECTED: `مرجعة للتعديل (${counts.REJECTED})`,
+      DUPLICATES_ONLY: `⚠️ تنبيهات تكرار / مطابقة (${counts.DUPLICATES_ONLY})`
     };
     [...sel.options].forEach(opt => {
       if (labels[opt.value]) opt.textContent = labels[opt.value];
@@ -7072,7 +7267,9 @@
     const filtered = baseList.filter(s => {
       const st = String(s.status || 'PENDING').toUpperCase();
       if (stF !== 'ALL' && st !== stF) return false;
-      if (stageF !== 'ALL' && getStageKey(s) !== stageF) return false;
+      if (stageF === 'DUPLICATES_ONLY') {
+        if (!window.SysconDuplicateRadar || !window.SysconDuplicateRadar.hasAlert(s)) return false;
+      } else if (stageF !== 'ALL' && getStageKey(s) !== stageF) return false;
       if (deptF !== 'ALL' && s.department !== deptF) return false;
       if (userF !== 'all') {
         const sub = String(s.submittedByEngineer || '').toLowerCase().trim();
@@ -7126,6 +7323,7 @@
           <td class="py-3 px-4">
             <div class="font-bold text-white font-mono">${esc(fmtFullName(s))}</div>
             <div class="text-[10px] text-teal-400 font-mono">كود: ${esc(fmtCode(s))} • ${esc(s.region || '-')}</div>
+            ${window.SysconDuplicateRadar ? window.SysconDuplicateRadar.getTableBadgeHtml(s) : ''}
           </td>
           <td class="py-3 px-4 text-sky-300 font-bold">
             ${esc(s.department || '-')}
@@ -7168,7 +7366,9 @@
     const filtered = baseList.filter(s => {
       const st = String(s.status || 'PENDING').toUpperCase();
       if (stF !== 'ALL' && st !== stF) return false;
-      if (stageF !== 'ALL' && getStageKey(s) !== stageF) return false;
+      if (stageF === 'DUPLICATES_ONLY') {
+        if (!window.SysconDuplicateRadar || !window.SysconDuplicateRadar.hasAlert(s)) return false;
+      } else if (stageF !== 'ALL' && getStageKey(s) !== stageF) return false;
       if (deptF !== 'ALL' && s.department !== deptF) return false;
       if (engF !== 'all') {
         const sub = String(s.submittedByEngineer || '').toLowerCase().trim();
@@ -7222,6 +7422,7 @@
           <td class="py-3 px-4">
             <div class="font-bold text-white font-mono">${esc(fmtFullName(s))}</div>
             <div class="text-[10px] text-sky-400 font-mono">كود: ${esc(fmtCode(s))} • ${esc(s.region || '-')}</div>
+            ${window.SysconDuplicateRadar ? window.SysconDuplicateRadar.getTableBadgeHtml(s) : ''}
           </td>
           <td class="py-3 px-4 text-sky-300 font-bold">
             ${esc(s.department || '-')}
@@ -7308,7 +7509,7 @@
 
       return `
         <tr class="hover:bg-slate-800/40 ${isReturned ? 'bg-amber-950/15' : ''}">
-          <td class="py-3 px-4 font-bold text-white font-mono">${esc(fmtFullName(s))}<div class="text-[10px] text-slate-400">${esc(s.region || '-')}</div></td>
+          <td class="py-3 px-4 font-bold text-white font-mono">${esc(fmtFullName(s))}<div class="text-[10px] text-slate-400">${esc(s.region || '-')}</div>${window.SysconDuplicateRadar ? window.SysconDuplicateRadar.getTableBadgeHtml(s) : ''}</td>
           <td class="py-3 px-4 text-sky-300 font-bold">${esc(s.department || '-')}<div class="text-[10px] text-slate-400 font-normal">${esc(s.activityType || '-')}</div></td>
           <td class="py-3 px-4"><div class="font-bold text-amber-300">${esc(s.teamLeader || '-')}</div><div class="text-[10px] text-slate-300">${esc(s.submittedByEngineer || '-')}${isTechSheetCheck(s) ? ' <span class="px-1 py-0.2 rounded bg-teal-950 text-teal-300 border border-teal-700 text-[9px] font-black">فني</span>' : ''}</div></td>
           <td class="py-3 px-4 max-w-xs">${badges || '-'}</td>
@@ -8657,6 +8858,830 @@
       first.deliveredToAccountsAt || first.hrConfirmedDate || nowDateTimeStr(),
       true
     );
+  };
+})();
+</script>
+
+<script>
+(function initSysconDuplicateRadar() {
+  "use strict";
+
+  const GENERIC_INVOICES = new Set([
+    '', '-', '--', '---', '.', '0', '00', '000', 'ok', 'no', 'none', 'n/a', 'na',
+    'لايوجد', 'لا يوجد', 'بدون', 'مفيش', 'نقدي', 'كاش', 'cash'
+  ]);
+
+  function esc(s) {
+    if (s === null || s === undefined) return '';
+    return String(s)
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+  }
+
+  function normAr(s) {
+    return String(s || '')
+      .replace(/^(م|مهندس|فني|eng|تيم ليدر|ليدر|الليدر)[\.\s\/\-:]+/gi, '')
+      .replace(/[أإآ]/g, 'ا').replace(/ة/g, 'ه').replace(/ى/g, 'ي')
+      .replace(/\s+/g, ' ').trim().toLowerCase();
+  }
+
+  function toLatinDigits(str) {
+    return String(str || '').replace(/[٠-٩]/g, c => '٠١٢٣٤٥٦٧٨٩'.indexOf(c));
+  }
+
+  function parseDayNumber(str) {
+    const clean = toLatinDigits(str).trim();
+    if (!clean) return null;
+    let y, m, d;
+    const m1 = clean.match(/^(\d{1,2})[\/\-\.](\d{1,2})[\/\-\.](\d{2,4})/);
+    const m2 = clean.match(/^(\d{4})[\/\-\.](\d{1,2})[\/\-\.](\d{1,2})/);
+    if (m2) {
+      y = parseInt(m2[1], 10); m = parseInt(m2[2], 10); d = parseInt(m2[3], 10);
+    } else if (m1) {
+      d = parseInt(m1[1], 10); m = parseInt(m1[2], 10); y = parseInt(m1[3], 10);
+      if (y < 100) y += 2000;
+    } else {
+      return null;
+    }
+    if (m < 1 || m > 12 || d < 1 || d > 31 || y < 2000 || y > 2100) return null;
+    const utcMs = Date.UTC(y, m - 1, d);
+    const dt = new Date(utcMs);
+    if (dt.getUTCFullYear() !== y || dt.getUTCMonth() !== (m - 1) || dt.getUTCDate() !== d) return null;
+    return Math.floor(utcMs / 86400000);
+  }
+
+  function formatDayNum(dayNum) {
+    const dt = new Date(dayNum * 86400000);
+    const dd = String(dt.getUTCDate()).padStart(2, '0');
+    const mm = String(dt.getUTCMonth() + 1).padStart(2, '0');
+    const yy = dt.getUTCFullYear();
+    return `${dd}/${mm}/${yy}`;
+  }
+
+  function getMonthKeyFromDay(dayNum) {
+    if (dayNum === null || dayNum === undefined) return '';
+    const dt = new Date(dayNum * 86400000);
+    return `${dt.getUTCFullYear()}-${String(dt.getUTCMonth() + 1).padStart(2, '0')}`;
+  }
+
+  function getDateRange(s) {
+    const sd = parseDayNumber(s?.startDate);
+    let ed = parseDayNumber(s?.endDate);
+    if (sd === null && ed === null) return { startDay: null, endDay: null };
+    const startDay = sd !== null ? sd : ed;
+    if (ed === null || ed < startDay) ed = startDay;
+    return { startDay, endDay: ed };
+  }
+
+  // التداخل الحقيقي: يوم مشترك واحد على الأقل (start1 <= end2 && start2 <= end1)
+  // أما الأيام المتتالية (مثلاً 10/11 ثم 11/11) فـ overlaps = false تماماً!
+  function compareDateRanges(r1, r2) {
+    if (r1.startDay === null || r2.startDay === null) {
+      return { overlaps: false, sharedDays: 0, isConsecutive: false, gapDays: null, overlapText: '' };
+    }
+    const ovStart = Math.max(r1.startDay, r2.startDay);
+    const ovEnd = Math.min(r1.endDay, r2.endDay);
+    if (ovStart <= ovEnd) {
+      const sharedDays = (ovEnd - ovStart) + 1;
+      const overlapText = ovStart === ovEnd
+        ? formatDayNum(ovStart)
+        : `${formatDayNum(ovStart)} ← ${formatDayNum(ovEnd)} (${sharedDays} أيام)`;
+      return { overlaps: true, sharedDays, isConsecutive: false, gapDays: 0, overlapText };
+    }
+    const gapDays = Math.max(r1.startDay - r2.endDay, r2.startDay - r1.endDay);
+    return {
+      overlaps: false,
+      sharedDays: 0,
+      isConsecutive: gapDays >= 1 && gapDays <= 3,
+      gapDays,
+      overlapText: ''
+    };
+  }
+
+  function extractPureSites(s) {
+    const raw = typeof s === 'string' ? s : String(s?.siteName || '').trim();
+    if (!raw) return [];
+    const parts = raw.split(/[\+,،\/\|&\n]+/).map(x => x.trim()).filter(Boolean);
+    const set = new Set();
+    parts.forEach(p => {
+      const norm = toLatinDigits(p)
+        .toUpperCase()
+        .replace(/\b(UP|DE|UPPER|DELTA|SITE)\b/g, '')
+        .replace(/(UP|DE)$/g, '')
+        .replace(/[\s\-_\/\\]+/g, '');
+      if (norm.length >= 3) set.add(norm);
+    });
+    return [...set];
+  }
+
+  function isSameSubmitter(a, b) {
+    const idA = String(a?.engineerUserId || '').trim();
+    const idB = String(b?.engineerUserId || '').trim();
+    if (idA && idB && idA === idB) return true;
+    const emA = String(a?.engineerEmail || '').toLowerCase().trim();
+    const emB = String(b?.engineerEmail || '').toLowerCase().trim();
+    if (emA && emB && emA === emB) return true;
+    const nmA = normAr(a?.submittedByEngineer || '');
+    const nmB = normAr(b?.submittedByEngineer || '');
+    if (nmA && nmB && nmA.length >= 3 && nmA === nmB) return true;
+    return false;
+  }
+
+  // استخراج جميع الأشخاص في التصفية (مقدم التصفية + أعضاء GROUP) مع الاحتفاظ بالاسم المقروء
+  function extractPeopleMap(s) {
+    const map = new Map();
+    const addName = (raw) => {
+      const display = String(raw || '').trim();
+      const key = normAr(display);
+      if (key.length >= 3 && !map.has(key)) {
+        map.set(key, display);
+      }
+    };
+    if (s?.submittedByEngineer) addName(s.submittedByEngineer);
+    const rawMems = Array.isArray(s?.teamMembers) ? s.teamMembers.join(',') : String(s?.teamMembers || '');
+    rawMems.split(/[,،\-\/\|\+\n]+/).forEach(addName);
+    return map;
+  }
+
+  function namesRoughlyMatch(a, b) {
+    const na = normAr(a);
+    const nb = normAr(b);
+    if (!na || !nb || na.length < 3 || nb.length < 3) return false;
+    if (na === nb || na.includes(nb) || nb.includes(na)) return true;
+    const ta = na.split(' ').filter(x => x.length >= 3);
+    const tb = nb.split(' ').filter(x => x.length >= 3);
+    if (ta.length > 0 && tb.length > 0 && ta[0] === tb[0]) {
+      if (ta.length === 1 || tb.length === 1) return true;
+      if (ta.some((tok, i) => i > 0 && tb.includes(tok))) return true;
+    }
+    return false;
+  }
+
+  function extractInvoices(s) {
+    const items = Array.isArray(s?.items) ? s.items : [];
+    const out = [];
+    const seen = new Set();
+    items.forEach(it => {
+      const raw = String(it?.invoiceNumber || '').trim();
+      const key = toLatinDigits(raw).toLowerCase().replace(/\s+/g, '');
+      if (!key || key.length < 3 || GENERIC_INVOICES.has(key)) return;
+      if (!seen.has(key)) {
+        seen.add(key);
+        out.push({ key, raw });
+      }
+    });
+    return out;
+  }
+
+  function fmtCode(s) {
+    if (typeof window.getSysconFormattedCode === 'function') return window.getSysconFormattedCode(s);
+    return s?.sheetNumber || 'SYS-0000';
+  }
+
+  function calcExp(s) {
+    return (s?.items || []).reduce((a, b) => a + (parseFloat(b.amount) || 0), 0);
+  }
+
+  function isRejectedSheet(s) {
+    if (!s) return true;
+    const st = String(s.status || '').toUpperCase().trim();
+    return st === 'REJECTED' || s.isRejected === true;
+  }
+
+  function getSheetShortStatus(s) {
+    if (!s) return '-';
+    if (s.deliveredToAccounts || s.hrConfirmed) return 'مُسلّمة للحسابات';
+    if (s.cooApproved || s.isCooApproved) return 'معتمدة COO';
+    if (s.technicalApproved) return 'معتمدة فني';
+    const st = String(s.status || '').toUpperCase().trim();
+    if (st === 'APPROVED' || s.isApproved || s.signatureData) return 'معتمدة ليدر';
+    return 'قيد المراجعة';
+  }
+
+  // بند 5: المطابقة التلقائية مع سجل الـ Manpower (مع حماية كاملة ضد التنبيهات الوهمية إذا كان الشهر غير مرفوع)
+  function evaluateManpowerMatch(sheet) {
+    const mp = Array.isArray(window.mpRawData) ? window.mpRawData : [];
+    const tRange = getDateRange(sheet);
+    const tSites = extractPureSites(sheet);
+
+    if (mp.length === 0 || tRange.startDay === null || tSites.length === 0) {
+      return {
+        status: 'NO_DATA',
+        label: 'لا توجد بيانات Manpower متاحة للمطابقة',
+        triggersWarning: false,
+        records: []
+      };
+    }
+
+    const targetMonths = new Set([getMonthKeyFromDay(tRange.startDay), getMonthKeyFromDay(tRange.endDay)]);
+    const monthMpRows = [];
+    for (const r of mp) {
+      const rDay = parseDayNumber(r?.date);
+      if (rDay === null) continue;
+      if (targetMonths.has(getMonthKeyFromDay(rDay))) {
+        monthMpRows.push({ r, rDay });
+      }
+    }
+
+    if (monthMpRows.length === 0) {
+      const mLabel = [...targetMonths].filter(Boolean).join(' / ');
+      return {
+        status: 'NO_DATA',
+        label: `لا توجد بيانات Manpower مرفوعة لشهر (${mLabel})`,
+        triggersWarning: false,
+        records: []
+      };
+    }
+
+    const siteMatchedRows = [];
+    for (const entry of monthMpRows) {
+      const rSites = extractPureSites(`${entry.r.code || ''} + ${entry.r.site || ''}`);
+      if (rSites.some(cs => tSites.includes(cs))) {
+        siteMatchedRows.push(entry);
+      }
+    }
+
+    if (siteMatchedRows.length === 0) {
+      return {
+        status: 'MISSING',
+        label: `غير مسجل في Manpower لهذا الشهر (${tSites.join(' + ')})`,
+        triggersWarning: true,
+        records: []
+      };
+    }
+
+    const peopleMap = extractPeopleMap(sheet);
+    const allSheetNames = [...peopleMap.values()];
+    const dateMatches = siteMatchedRows.filter(e => e.rDay >= tRange.startDay && e.rDay <= tRange.endDay);
+
+    if (dateMatches.length > 0) {
+      const exactEngMatch = dateMatches.find(e =>
+        allSheetNames.some(nm => namesRoughlyMatch(nm, e.r.engineer))
+      );
+      if (exactEngMatch) {
+        return {
+          status: 'MATCHED',
+          label: `مطابق لسجل Manpower (${exactEngMatch.r.engineer} • ${exactEngMatch.r.date} • ${exactEngMatch.r.stream || '-'})`,
+          triggersWarning: false,
+          records: dateMatches.map(x => x.r)
+        };
+      }
+      const actualStr = dateMatches.slice(0, 3).map(x => `${x.r.engineer || '-'} (${x.r.date})`).join(' ، ');
+      return {
+        status: 'PARTIAL',
+        label: `الموقع والتاريخ في Manpower بمهندس مختلف: ${actualStr}`,
+        triggersWarning: true,
+        records: dateMatches.map(x => x.r)
+      };
+    }
+
+    const datesStr = siteMatchedRows.slice(0, 4).map(x => `${x.r.date} (${x.r.engineer || '-'})`).join(' ، ');
+    return {
+      status: 'PARTIAL',
+      label: `الموقع موجود في Manpower بتواريخ مختلفة: ${datesStr}`,
+      triggersWarning: true,
+      records: siteMatchedRows.map(x => x.r)
+    };
+  }
+
+  // التحليل الشامل (تكرار الفاتورة + تداخل نفس الموقع + بند 3 ازدواج الشخص في نفس اليوم + الزيارات السابقة للموقع)
+  function analyzeCandidate(target, ignoreDocId) {
+    const result = { high: [], medium: [], relatedVisits: [] };
+    if (!target || isRejectedSheet(target)) return result;
+
+    const all = Array.isArray(window.cachedClearancesList) ? window.cachedClearancesList : [];
+    const tSites = extractPureSites(target);
+    const tRange = getDateRange(target);
+    const tInvs = extractInvoices(target);
+    const tPeople = extractPeopleMap(target);
+
+    for (const other of all) {
+      if (!other || !other.id) continue;
+      if (other.id === target.id || (ignoreDocId && other.id === ignoreDocId)) continue;
+      if (isRejectedSheet(other)) continue;
+
+      const otherCode = fmtCode(other);
+      const otherDates = `${other.startDate || '-'} ← ${other.endDate || '-'}`;
+      const otherExp = calcExp(other);
+      const otherDelivered = other.deliveredToAccounts === true || other.hrConfirmed === true;
+      const oRange = getDateRange(other);
+      const dateCmp = compareDateRanges(tRange, oRange);
+
+      // 1) فحص تكرار رقم الفاتورة / الإيصال (يُكشف حتى لو كانت الأيام متتالية وغير متداخلة!)
+      if (tInvs.length > 0) {
+        const oInvs = extractInvoices(other);
+        const oInvMap = new Map(oInvs.map(x => [x.key, x.raw]));
+        for (const inv of tInvs) {
+          if (oInvMap.has(inv.key)) {
+            result.high.push({
+              kind: 'DUPLICATE_INVOICE',
+              invoice: inv.raw,
+              otherId: other.id,
+              otherCode,
+              otherSite: other.siteName || '-',
+              otherEngineer: other.submittedByEngineer || '-',
+              otherDates,
+              otherExp,
+              otherDelivered,
+              sharedSites: []
+            });
+          }
+        }
+      }
+
+      // 2) فحص تطابق كود الموقع
+      const oSites = extractPureSites(other);
+      const sharedSites = tSites.length > 0 ? tSites.filter(c => oSites.includes(c)) : [];
+      const sameUser = isSameSubmitter(target, other);
+
+      if (sharedSites.length > 0) {
+        if (dateCmp.overlaps) {
+          if (sameUser) {
+            result.high.push({
+              kind: 'SAME_USER_DATE_OVERLAP',
+              otherId: other.id,
+              otherCode,
+              otherSite: other.siteName || '-',
+              otherEngineer: other.submittedByEngineer || '-',
+              otherActivity: other.activityType || '-',
+              otherDates,
+              otherExp,
+              otherDelivered,
+              sharedSites,
+              sharedDays: dateCmp.sharedDays,
+              overlapText: dateCmp.overlapText
+            });
+          } else {
+            const oPeople = extractPeopleMap(other);
+            const sharedPeople = [];
+            tPeople.forEach((disp, k) => { if (oPeople.has(k)) sharedPeople.push(disp); });
+            result.medium.push({
+              kind: 'OTHER_USER_DATE_OVERLAP',
+              otherId: other.id,
+              otherCode,
+              otherSite: other.siteName || '-',
+              otherEngineer: other.submittedByEngineer || '-',
+              otherActivity: other.activityType || '-',
+              otherDates,
+              otherExp,
+              otherDelivered,
+              sharedSites,
+              sharedDays: dateCmp.sharedDays,
+              overlapText: dateCmp.overlapText,
+              sharedMembersCount: sharedPeople.length,
+              sharedPeople
+            });
+          }
+        } else {
+          // أيام غير متداخلة (بما في ذلك الأيام المتتالية لنفس المهندس وبنفس الفنيين) = مسموح 100%!
+          result.relatedVisits.push({
+            otherId: other.id,
+            otherCode,
+            otherSite: other.siteName || '-',
+            otherEngineer: other.submittedByEngineer || '-',
+            otherActivity: other.activityType || '-',
+            otherDates,
+            otherStartDay: oRange.startDay,
+            otherExp,
+            otherDelivered,
+            otherStatus: getSheetShortStatus(other),
+            otherJustification: other.repeatVisitReasonText || other.repeatVisitReasonCategory || '',
+            sharedSites,
+            sameUser,
+            isConsecutive: dateCmp.isConsecutive,
+            gapDays: dateCmp.gapDays
+          });
+        }
+      } else if (dateCmp.overlaps && tPeople.size > 0) {
+        // بند 3: كشف ازدواج الفني أو المهندس في نفس اليوم في موقع مختلف!
+        const oPeople = extractPeopleMap(other);
+        const sharedPeople = [];
+        tPeople.forEach((disp, k) => {
+          if (oPeople.has(k)) sharedPeople.push(disp);
+        });
+        if (sharedPeople.length > 0) {
+          result.medium.push({
+            kind: 'PERSON_SAME_DAY_CONFLICT',
+            otherId: other.id,
+            otherCode,
+            otherSite: other.siteName || '-',
+            otherEngineer: other.submittedByEngineer || '-',
+            otherActivity: other.activityType || '-',
+            otherDates,
+            otherExp,
+            otherDelivered,
+            sharedSites: [],
+            sharedDays: dateCmp.sharedDays,
+            overlapText: dateCmp.overlapText,
+            sharedPeople
+          });
+        }
+      }
+    }
+
+    return result;
+  }
+
+  // بند 4: فحص هل للموقع زيارة أخرى خلال آخر 5 أيام (لإظهار خانة التبرير الإلزامي)
+  function checkRecentSiteVisits(candidate, ignoreDocId) {
+    const res = analyzeCandidate(candidate, ignoreDocId);
+    return res.relatedVisits.filter(v => v.gapDays !== null && v.gapDays >= 1 && v.gapDays <= 5);
+  }
+
+  function updateStep4JustificationUI(candidate, ignoreDocId) {
+    const box = document.getElementById('repeatVisitJustificationBox');
+    const info = document.getElementById('repeatVisitRecentInfo');
+    if (!box) return false;
+    const recent = checkRecentSiteVisits(candidate, ignoreDocId);
+    if (recent.length === 0) {
+      box.classList.add('hidden');
+      return false;
+    }
+    box.classList.remove('hidden');
+    if (info) {
+      const txt = recent.slice(0, 3).map(v =>
+        `<span class="font-mono font-bold text-white">${esc(v.otherCode)}</span> (${esc(v.otherEngineer)} • ${esc(v.otherDates)})`
+      ).join(' ، ');
+      info.innerHTML = `الزيارة السابقة لنفس الموقع: ${txt}. الأيام المتتالية مسموحة تماماً، فقط حدّد السبب ليظهر للمراجع.`;
+    }
+    return true;
+  }
+
+  // التقييم الكامل (مؤشر الاشتباه Risk Score + قائمة أسباب التحذير + Manpower + الخط الزمني للموقع)
+  function evaluateSheetFull(sheet) {
+    const base = analyzeCandidate(sheet, null);
+    const mp = evaluateManpowerMatch(sheet);
+    const warnings = [];
+
+    base.high.forEach(m => {
+      if (m.kind === 'DUPLICATE_INVOICE') {
+        warnings.push({
+          severity: 'high',
+          otherId: m.otherId,
+          text: `فاتورة مكررة: رقم الإيصال (${m.invoice}) مستخدم مسبقاً في التصفية (${m.otherCode} - ${m.otherSite}) بتاريخ (${m.otherDates}).`
+        });
+      } else {
+        warnings.push({
+          severity: 'high',
+          otherId: m.otherId,
+          text: `تكرار/تداخل تاريخ (${m.overlapText}) لنفس الموقع (${m.sharedSites.join(' + ')}) ونفس مقدم التصفية مع (${m.otherCode} • ${m.otherExp.toLocaleString()} ج.م).`
+        });
+      }
+    });
+
+    base.medium.forEach(m => {
+      if (m.kind === 'PERSON_SAME_DAY_CONFLICT') {
+        warnings.push({
+          severity: 'medium',
+          otherId: m.otherId,
+          text: `ازدواج تواجد في نفس اليوم: (${m.sharedPeople.join(' ، ')}) مسجل في تصفية أخرى (${m.otherCode} - ${m.otherSite}) بتاريخ (${m.overlapText}) — احتمال صرف إعاشة/بدلات مكررة.`
+        });
+      } else {
+        const extraP = m.sharedMembersCount > 0 ? ` مع اشتراك (${m.sharedPeople.join(' ، ')}) في نفس اليوم` : '';
+        warnings.push({
+          severity: 'medium',
+          otherId: m.otherId,
+          text: `تداخل تاريخ (${m.overlapText}) لنفس الموقع (${m.sharedSites.join(' + ')}) مع تصفية (${m.otherEngineer} - ${m.otherCode})${extraP}.`
+        });
+      }
+    });
+
+    if (mp.triggersWarning) {
+      warnings.push({
+        severity: 'medium',
+        otherId: null,
+        text: `مطابقة Manpower: ${mp.label}.`
+      });
+    }
+
+    let riskLevel = 'SAFE';
+    if (base.high.length > 0 || base.medium.length >= 2 || (base.medium.length >= 1 && mp.status === 'MISSING')) {
+      riskLevel = 'HIGH';
+    } else if (warnings.length > 0) {
+      riskLevel = 'MEDIUM';
+    }
+
+    // بناء الخط الزمني للموقع (بند 6)
+    const tRange = getDateRange(sheet);
+    const timeline = [];
+    const seenIds = new Set();
+    if (sheet && sheet.id) {
+      seenIds.add(sheet.id);
+      timeline.push({
+        id: sheet.id,
+        isCurrent: true,
+        code: fmtCode(sheet),
+        engineer: sheet.submittedByEngineer || '-',
+        activity: sheet.activityType || '-',
+        dates: `${sheet.startDate || '-'} ← ${sheet.endDate || '-'}`,
+        sortDay: tRange.startDay ?? 9999999,
+        exp: calcExp(sheet),
+        status: 'الحالية',
+        justification: sheet.repeatVisitReasonText || sheet.repeatVisitReasonCategory || '',
+        isConsecutive: false
+      });
+    }
+
+    const pushTimelineItem = (id, code, eng, act, dates, sortDay, exp, status, justif, isConsec) => {
+      if (!id || seenIds.has(id)) return;
+      seenIds.add(id);
+      timeline.push({
+        id, isCurrent: false, code, engineer: eng, activity: act, dates,
+        sortDay: sortDay ?? 0, exp, status, justification: justif, isConsecutive: isConsec
+      });
+    };
+
+    base.relatedVisits.forEach(v => {
+      pushTimelineItem(v.otherId, v.otherCode, v.otherEngineer, v.otherActivity, v.otherDates, v.otherStartDay, v.otherExp, v.otherStatus, v.otherJustification, v.isConsecutive);
+    });
+    base.high.filter(m => m.kind === 'SAME_USER_DATE_OVERLAP').forEach(m => {
+      const otherDoc = (window.cachedClearancesList || []).find(x => x.id === m.otherId);
+      pushTimelineItem(m.otherId, m.otherCode, m.otherEngineer, m.otherActivity || '-', m.otherDates, getDateRange(otherDoc).startDay, m.otherExp, getSheetShortStatus(otherDoc), otherDoc?.repeatVisitReasonText || '', false);
+    });
+    base.medium.filter(m => m.kind === 'OTHER_USER_DATE_OVERLAP').forEach(m => {
+      const otherDoc = (window.cachedClearancesList || []).find(x => x.id === m.otherId);
+      pushTimelineItem(m.otherId, m.otherCode, m.otherEngineer, m.otherActivity || '-', m.otherDates, getDateRange(otherDoc).startDay, m.otherExp, getSheetShortStatus(otherDoc), otherDoc?.repeatVisitReasonText || '', false);
+    });
+
+    timeline.sort((a, b) => (a.sortDay - b.sortDay));
+
+    return {
+      high: base.high,
+      medium: base.medium,
+      relatedVisits: base.relatedVisits,
+      mp,
+      warnings,
+      riskLevel,
+      timeline
+    };
+  }
+
+  function hasAlert(s) {
+    if (!s || isRejectedSheet(s)) return false;
+    const ev = evaluateSheetFull(s);
+    return ev.warnings.length > 0;
+  }
+
+  function getTableBadgeHtml(s) {
+    if (!s || isRejectedSheet(s)) return '';
+    const ev = evaluateSheetFull(s);
+    const pills = [];
+
+    if (ev.high.length > 0) {
+      const top = ev.high[0];
+      const lbl = top.kind === 'DUPLICATE_INVOICE'
+        ? `⛔ فاتورة مكررة (${top.invoice}) مع ${top.otherCode}`
+        : `⛔ تداخل تاريخ (${top.overlapText}) مع ${top.otherCode}`;
+      pills.push(`<span class="inline-block px-2 py-0.5 rounded-md text-[10px] font-black bg-rose-950 text-rose-300 border border-rose-600/80">${esc(lbl)}</span>`);
+    } else if (ev.medium.length > 0) {
+      const top = ev.medium[0];
+      const lbl = top.kind === 'PERSON_SAME_DAY_CONFLICT'
+        ? `⚠️ ازدواج يوم (${top.sharedPeople[0]}) مع ${top.otherCode}`
+        : `⚠️ تداخل موقع (${top.overlapText}) مع ${top.otherCode}`;
+      pills.push(`<span class="inline-block px-2 py-0.5 rounded-md text-[10px] font-black bg-amber-950 text-amber-300 border border-amber-500/70">${esc(lbl)}</span>`);
+    }
+
+    if (ev.mp.status === 'MISSING') {
+      pills.push(`<span class="inline-block px-2 py-0.5 rounded-md text-[10px] font-black bg-orange-950 text-orange-300 border border-orange-500/70">📋 غير مسجل في Manpower</span>`);
+    } else if (ev.mp.status === 'PARTIAL') {
+      pills.push(`<span class="inline-block px-2 py-0.5 rounded-md text-[10px] font-black bg-amber-950 text-amber-200 border border-amber-500/60">📋 اختلاف مع Manpower</span>`);
+    }
+
+    return pills.length > 0 ? `<div class="mt-1 flex flex-wrap gap-1">${pills.join('')}</div>` : '';
+  }
+
+  // شريط شاشة الفحص (بند 4 التبرير + بند 5 Manpower + بند 6 مؤشر الاشتباه والخط الزمني للموقع)
+  function renderModalBanner(sheet) {
+    const box = document.getElementById('modalDuplicateRadarBanner');
+    if (!box) return;
+    if (!sheet || isRejectedSheet(sheet)) {
+      box.classList.add('hidden');
+      box.innerHTML = '';
+      return;
+    }
+
+    const ev = evaluateSheetFull(sheet);
+    const justifText = sheet.repeatVisitReasonText || sheet.repeatVisitReasonCategory || '';
+
+    const riskBadgeHtml = ev.riskLevel === 'HIGH'
+      ? `<span class="px-3 py-1 rounded-full text-xs font-black bg-rose-600 text-white shadow-sm">🔴 اشتباه عالي (${ev.warnings.length} تنبيه)</span>`
+      : (ev.riskLevel === 'MEDIUM'
+          ? `<span class="px-3 py-1 rounded-full text-xs font-black bg-amber-500 text-slate-950 shadow-sm">🟡 راجع قبل الاعتماد (${ev.warnings.length} تنبيه)</span>`
+          : `<span class="px-3 py-1 rounded-full text-xs font-black bg-emerald-600 text-white shadow-sm">🟢 آمن — لا توجد شبهة تكرار</span>`);
+
+    const mpBadgeHtml = ev.mp.status === 'MATCHED'
+      ? `<span class="px-2.5 py-1 rounded-full text-[11px] font-black bg-emerald-100 text-emerald-900 border border-emerald-400">🟢 ${esc(ev.mp.label)}</span>`
+      : (ev.mp.status === 'PARTIAL'
+          ? `<span class="px-2.5 py-1 rounded-full text-[11px] font-black bg-amber-100 text-amber-950 border border-amber-500">🟡 ${esc(ev.mp.label)}</span>`
+          : (ev.mp.status === 'MISSING'
+              ? `<span class="px-2.5 py-1 rounded-full text-[11px] font-black bg-orange-100 text-orange-950 border border-orange-500">🟠 ${esc(ev.mp.label)}</span>`
+              : `<span class="px-2.5 py-1 rounded-full text-[11px] font-bold bg-slate-200 text-slate-700 border border-slate-300">⚪ ${esc(ev.mp.label)}</span>`));
+
+    const parts = [];
+
+    // 1. شريط مؤشر الاشتباه + حالة Manpower
+    parts.push(`
+      <div class="flex flex-wrap items-center justify-between gap-2 bg-white border border-slate-300 rounded-xl px-3 py-2">
+        <div class="flex flex-wrap items-center gap-2">
+          <span class="font-black text-slate-700 text-xs">رادار التدقيق:</span>
+          ${riskBadgeHtml}
+        </div>
+        <div class="flex flex-wrap items-center gap-1.5">${mpBadgeHtml}</div>
+      </div>
+    `);
+
+    // 2. تبرير المهندس للزيارة المتتالية/المتكررة (بند 4)
+    if (justifText) {
+      parts.push(`
+        <div class="px-3 py-2 rounded-xl bg-indigo-50 border border-indigo-400 text-indigo-950 flex flex-wrap items-center gap-2">
+          <span class="px-2 py-0.5 rounded bg-indigo-600 text-white font-black text-[10.5px]">مبرر تكرار الزيارة</span>
+          <span class="font-extrabold text-xs">${esc(justifText)}</span>
+        </div>
+      `);
+    }
+
+    // 3. بطاقات التحذيرات (إن وجدت)
+    if (ev.warnings.length > 0) {
+      const cardCls = ev.riskLevel === 'HIGH'
+        ? 'bg-rose-50 border-2 border-rose-500 text-rose-950'
+        : 'bg-amber-50 border-2 border-amber-500 text-amber-950';
+      const titleCls = ev.riskLevel === 'HIGH' ? 'text-rose-800' : 'text-amber-900';
+      parts.push(`
+        <div class="p-3 rounded-xl ${cardCls} space-y-1.5">
+          <div class="font-black ${titleCls} text-xs">أسباب التحذير المرصودة (يرجى التحقق قبل الاعتماد):</div>
+          ${ev.warnings.map(w => `
+            <div class="flex flex-wrap items-center justify-between gap-2 bg-white border ${w.severity === 'high' ? 'border-rose-300' : 'border-amber-300'} rounded-lg px-3 py-1.5">
+              <div class="font-bold text-[11.5px] ${w.severity === 'high' ? 'text-rose-900' : 'text-slate-800'}">
+                ${w.severity === 'high' ? '⛔' : '⚠️'} ${esc(w.text)}
+              </div>
+              ${w.otherId ? `<button type="button" onclick="openClearanceReview('${w.otherId}', true)" class="px-2.5 py-1 rounded-lg ${w.severity === 'high' ? 'bg-rose-600 hover:bg-rose-700' : 'bg-amber-600 hover:bg-amber-700'} text-white font-black text-[10.5px] cursor-pointer shrink-0">فتح للمقارنة</button>` : ''}
+            </div>
+          `).join('')}
+        </div>
+      `);
+    }
+
+    // 4. الخط الزمني لتاريخ الموقع (بند 6) — يظهر متى وُجدت زيارة أخرى لنفس الموقع
+    if (ev.timeline.length > 1) {
+      const rows = ev.timeline.slice(-6).map(item => `
+        <tr class="${item.isCurrent ? 'bg-sky-100/80 font-black' : 'bg-white hover:bg-slate-50'} border-t border-slate-200">
+          <td class="py-1.5 px-2 font-mono text-[11px] text-slate-700">${esc(item.dates)}</td>
+          <td class="py-1.5 px-2 font-mono font-black text-sky-800">${esc(item.code)} ${item.isCurrent ? '<span class="px-1.5 py-0.2 rounded bg-sky-600 text-white text-[9px]">الحالية</span>' : (item.isConsecutive ? '<span class="px-1.5 py-0.2 rounded bg-emerald-100 text-emerald-800 text-[9px]">متتالية</span>' : '')}</td>
+          <td class="py-1.5 px-2 font-bold text-slate-900">${esc(item.engineer)}</td>
+          <td class="py-1.5 px-2 text-slate-600">${esc(item.activity)}</td>
+          <td class="py-1.5 px-2 font-mono font-black text-emerald-800">${item.exp.toLocaleString()} ج.م</td>
+          <td class="py-1.5 px-2 text-[10.5px] text-indigo-800 font-bold">${esc(item.justification || '-')}</td>
+          <td class="py-1.5 px-2 text-center">
+            ${item.isCurrent
+              ? '<span class="text-[10px] text-sky-700 font-black">قيد العرض</span>'
+              : `<button type="button" onclick="openClearanceReview('${item.id}', true)" class="px-2 py-0.5 rounded bg-sky-600 hover:bg-sky-700 text-white font-bold text-[10px] cursor-pointer">فتح</button>`}
+          </td>
+        </tr>
+      `).join('');
+
+      parts.push(`
+        <div class="rounded-xl border border-sky-300 bg-sky-50/70 overflow-hidden">
+          <div class="px-3 py-1.5 bg-sky-100 border-b border-sky-200 flex items-center justify-between text-[11px] font-black text-sky-950">
+            <span>📅 الخط الزمني لزيارات نفس الموقع (${ev.timeline.length} زيارات مرتبة بالتاريخ)</span>
+            <span class="text-sky-700 font-bold">الأيام المتتالية بدون تداخل مسموحة</span>
+          </div>
+          <div class="overflow-x-auto">
+            <table class="w-full text-right text-[11px]">
+              <thead class="bg-white/70 text-slate-500 font-bold">
+                <tr>
+                  <th class="py-1 px-2">الفترة</th>
+                  <th class="py-1 px-2">الكود</th>
+                  <th class="py-1 px-2">المهندس / الفني</th>
+                  <th class="py-1 px-2">النشاط</th>
+                  <th class="py-1 px-2">المنصرف</th>
+                  <th class="py-1 px-2">مبرر الزيارة</th>
+                  <th class="py-1 px-2 text-center">مقارنة</th>
+                </tr>
+              </thead>
+              <tbody>${rows}</tbody>
+            </table>
+          </div>
+        </div>
+      `);
+    }
+
+    box.innerHTML = parts.join('');
+    box.className = 'no-print px-4 py-3 border-b border-slate-300 bg-slate-100 text-xs space-y-2';
+  }
+
+  // نافذة التحذير الإجبارية قبل اعتماد التيم ليدر / الإدارة الفنية / COO
+  function guardApproval(sheet, approverRole, onConfirmProceed, onReturnAction) {
+    if (!sheet) return onConfirmProceed(null);
+    const ev = evaluateSheetFull(sheet);
+    if (ev.warnings.length === 0) {
+      return onConfirmProceed(null);
+    }
+
+    document.getElementById('sysconApprovalWarningModal')?.remove();
+
+    const roleTitles = {
+      LEADER: 'تحذير قبل اعتماد التيم ليدر (APPROVED ✓)',
+      TECHNICAL: 'تحذير قبل اعتماد الإدارة الفنية',
+      COO: 'تحذير قبل اعتماد الـ COO'
+    };
+    const roleHeader = roleTitles[approverRole] || 'تحذير قبل الاعتماد';
+    const isHigh = ev.riskLevel === 'HIGH';
+    const justifText = sheet.repeatVisitReasonText || sheet.repeatVisitReasonCategory || '';
+    const reasonsSummary = ev.warnings.map(w => w.text).join(' | ');
+
+    const m = document.createElement('div');
+    m.id = 'sysconApprovalWarningModal';
+    m.className = 'fixed inset-0 z-[215] bg-slate-950/90 backdrop-blur-md flex items-center justify-center p-4 overflow-y-auto no-print';
+    m.setAttribute('dir', 'rtl');
+
+    m.innerHTML = `
+      <div class="sys-card border-2 ${isHigh ? 'border-rose-500' : 'border-amber-500'} max-w-xl w-full p-5 sm:p-6 space-y-4 text-slate-100 shadow-2xl my-auto">
+        <div class="flex items-start justify-between gap-3 border-b border-slate-800 pb-3">
+          <div class="flex items-center gap-3">
+            <div class="w-12 h-12 rounded-2xl ${isHigh ? 'bg-rose-500/20 border-rose-500 text-rose-400' : 'bg-amber-500/20 border-amber-500 text-amber-300'} border flex items-center justify-center text-2xl shrink-0">
+              ${isHigh ? '⛔' : '⚠️'}
+            </div>
+            <div>
+              <h3 class="text-sm sm:text-base font-black text-white">${esc(roleHeader)}</h3>
+              <div class="flex flex-wrap items-center gap-2 mt-1">
+                <span class="font-mono text-xs font-black text-sky-400">${esc(sheet.siteName || '-')} - ${esc(fmtCode(sheet))}</span>
+                <span class="px-2.5 py-0.5 rounded-full text-[10.5px] font-black ${isHigh ? 'bg-rose-600 text-white' : 'bg-amber-500 text-slate-950'}">
+                  ${isHigh ? '🔴 اشتباه عالي' : '🟡 راجع قبل الاعتماد'}
+                </span>
+              </div>
+            </div>
+          </div>
+          <button type="button" id="btnCloseWarnX" class="sys-btn-sm bg-slate-800 hover:bg-slate-700 text-slate-300">✕</button>
+        </div>
+
+        <div class="space-y-2 text-xs">
+          <div class="font-black ${isHigh ? 'text-rose-300' : 'text-amber-300'}">أسباب التحذير المرصودة على هذه التصفية:</div>
+          <div class="space-y-2 max-h-56 overflow-y-auto pr-1">
+            ${ev.warnings.map(w => `
+              <div class="p-3 rounded-xl bg-slate-950 border ${w.severity === 'high' ? 'border-rose-600/70 text-rose-200' : 'border-amber-500/60 text-amber-100'} flex items-start justify-between gap-2 leading-relaxed font-bold">
+                <span>${w.severity === 'high' ? '⛔' : '⚠️'} ${esc(w.text)}</span>
+                ${w.otherId ? `<button type="button" data-compare-id="${w.otherId}" class="btn-warn-compare shrink-0 px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-sky-600 text-sky-300 hover:text-white text-[10.5px] font-black cursor-pointer">مقارنة</button>` : ''}
+              </div>
+            `).join('')}
+          </div>
+        </div>
+
+        <div class="p-3 rounded-xl bg-slate-950 border border-slate-800 text-xs">
+          <span class="text-slate-400 font-bold">مبرر المهندس لتكرار الزيارة: </span>
+          <strong class="${justifText ? 'text-indigo-300' : 'text-slate-500'}">${justifText ? esc(justifText) : 'لم يُسجَّل مبرر'}</strong>
+        </div>
+
+        <div class="text-[11px] text-slate-400 bg-slate-950/70 px-3 py-2 rounded-xl border border-slate-800/80">
+          ملاحظة رقابية: في حال اختيار <strong>«اعتماد رغم التحذير»</strong> سيتم توثيق الاعتماد وأسباب التحذير تلقائياً في <strong>سجل الرقابة (Audit Trail)</strong>.
+        </div>
+
+        <div class="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 pt-1">
+          <button type="button" id="btnWarnCancel" class="sys-btn flex-1 bg-slate-800 hover:bg-slate-700 text-white border border-slate-700">تراجع للمراجعة</button>
+          <button type="button" id="btnWarnReturn" class="sys-btn flex-1 bg-amber-500 hover:bg-amber-400 text-slate-950 font-black">إرجاع التصفية للتعديل</button>
+          <button type="button" id="btnWarnOverride" class="sys-btn flex-1 ${isHigh ? 'bg-rose-600 hover:bg-rose-500' : 'bg-emerald-600 hover:bg-emerald-500'} text-white font-black">اعتماد رغم التحذير (على مسؤوليتي)</button>
+        </div>
+      </div>
+    `;
+
+    document.body.appendChild(m);
+
+    const closeM = () => m.remove();
+    m.querySelector('#btnCloseWarnX').onclick = closeM;
+    m.querySelector('#btnWarnCancel').onclick = closeM;
+    m.querySelector('#btnWarnReturn').onclick = () => {
+      closeM();
+      if (typeof onReturnAction === 'function') onReturnAction();
+    };
+    m.querySelector('#btnWarnOverride').onclick = () => {
+      closeM();
+      if (typeof onConfirmProceed === 'function') onConfirmProceed(reasonsSummary);
+    };
+    m.querySelectorAll('.btn-warn-compare').forEach(btn => {
+      btn.onclick = () => {
+        const oid = btn.getAttribute('data-compare-id');
+        closeM();
+        if (oid && typeof window.openClearanceReview === 'function') {
+          window.openClearanceReview(oid, true);
+        }
+      };
+    });
+  }
+
+  window.SysconDuplicateRadar = {
+    parseDayNumber,
+    getDateRange,
+    compareDateRanges,
+    extractPureSites,
+    extractPeopleMap,
+    analyzeCandidate,
+    evaluateManpowerMatch,
+    checkRecentSiteVisits,
+    updateStep4JustificationUI,
+    evaluateSheetFull,
+    hasAlert,
+    getTableBadgeHtml,
+    renderModalBanner,
+    guardApproval
   };
 })();
 </script>
