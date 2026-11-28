@@ -56,15 +56,18 @@
       --accent-glow: rgba(14, 165, 233, 0.25);
     }
 
+    /* الوضع النهاري الاحترافي (Soft Slate) — بدون التأثير على الوضع الداكن */
     html[data-theme="light"] {
-      --bg-canvas: #f1f5f9;
-      --bg-surface: #ffffff;
-      --bg-elevated: #f8fafc;
-      --bg-input: #f1f5f9;
-      --border-subtle: rgba(15, 23, 42, 0.12);
-      --border-strong: rgba(2, 132, 199, 0.4);
+      --bg-canvas: #e5ecf4;
+      --bg-surface: #f4f7fb;
+      --bg-elevated: #eaf0f7;
+      --bg-input: #ffffff;
+      --border-subtle: #cbd5e1;
+      --border-strong: rgba(2, 132, 199, 0.45);
       --text-main: #0f172a;
       --text-muted: #475569;
+      --accent-primary: #0284c7;
+      --accent-glow: rgba(2, 132, 199, 0.2);
     }
 
     * {
@@ -83,21 +86,182 @@
       transition: background-color 0.25s ease, color 0.25s ease;
     }
 
-    html[data-theme="light"] body,
-    html[data-theme="light"] .bg-slate-950 { background-color: #f1f5f9 !important; color: #0f172a !important; }
-    html[data-theme="light"] .bg-slate-900,
-    html[data-theme="light"] .bg-slate-900\/95 { background-color: #ffffff !important; color: #0f172a !important; }
-    html[data-theme="light"] .bg-slate-950\/70,
-    html[data-theme="light"] .bg-slate-950\/80,
+    html[data-theme="light"] body {
+      background-color: #e5ecf4 !important;
+      color: #0f172a !important;
+    }
+
+    /* الهيدر وشريط التنقل السفلي والبطاقات */
+    html[data-theme="light"] header {
+      background-color: rgba(248, 250, 253, 0.96) !important;
+      border-bottom-color: #cbd5e1 !important;
+      box-shadow: 0 4px 16px -6px rgba(15, 23, 42, 0.12) !important;
+    }
+    html[data-theme="light"] #sysconMobileBottomNav {
+      background-color: rgba(248, 250, 253, 0.97) !important;
+      border-top-color: #cbd5e1 !important;
+    }
+    html[data-theme="light"] .sys-card {
+      background: #f6f9fc !important;
+      border-color: #cfdbe8 !important;
+      box-shadow: 0 8px 22px -12px rgba(15, 23, 42, 0.14) !important;
+    }
+    html[data-theme="light"] .sys-card:hover {
+      border-color: rgba(2, 132, 199, 0.45) !important;
+    }
+
+    /* الخلفيات الداكنة العامة تتحول لدرجات هادئة ومريحة */
+    html[data-theme="light"] .bg-slate-950,
+    html[data-theme="light"] .bg-slate-950\/95,
     html[data-theme="light"] .bg-slate-950\/90,
-    html[data-theme="light"] .bg-slate-800 { background-color: #e2e8f0 !important; color: #0f172a !important; }
+    html[data-theme="light"] .bg-slate-950\/80,
+    html[data-theme="light"] .bg-slate-950\/70,
+    html[data-theme="light"] .bg-slate-950\/50 {
+      background-color: #eaf0f7 !important;
+      color: #0f172a !important;
+    }
+    /* الإبقاء على خلفية التعتيم الخلفية للمودالات */
+    html[data-theme="light"] .fixed.inset-0.bg-slate-950\/85,
+    html[data-theme="light"] .fixed.inset-0.bg-slate-950\/90,
+    html[data-theme="light"] .fixed.inset-0.bg-slate-950\/95 {
+      background-color: rgba(15, 23, 42, 0.55) !important;
+    }
+    html[data-theme="light"] .bg-slate-900,
+    html[data-theme="light"] .bg-slate-900\/95 {
+      background-color: #f4f7fb !important;
+      color: #0f172a !important;
+    }
+    html[data-theme="light"] .bg-slate-800,
+    html[data-theme="light"] .bg-slate-800\/80 {
+      background-color: #dce5f0 !important;
+      color: #1e293b !important;
+    }
+    html[data-theme="light"] .hover\:bg-slate-800\/40:hover,
+    html[data-theme="light"] .hover\:bg-slate-800:hover {
+      background-color: #e2eaf4 !important;
+    }
+    html[data-theme="light"] .hover\:bg-slate-700:hover {
+      background-color: #cbd7e6 !important;
+    }
+
+    /* الجداول والمدخلات والحدود */
+    html[data-theme="light"] .sys-input {
+      background-color: #ffffff !important;
+      border-color: #cbd5e1 !important;
+      color: #0f172a !important;
+    }
+    html[data-theme="light"] .sys-input::placeholder {
+      color: #64748b !important;
+    }
     html[data-theme="light"] .border-slate-800,
-    html[data-theme="light"] .border-slate-700 { border-color: #cbd5e1 !important; }
+    html[data-theme="light"] .border-slate-700,
+    html[data-theme="light"] .divide-slate-800\/60 > :not([hidden]) ~ :not([hidden]),
+    html[data-theme="light"] .divide-slate-800\/70 > :not([hidden]) ~ :not([hidden]) {
+      border-color: #cbd5e1 !important;
+    }
+    html[data-theme="light"] thead {
+      background-color: #dfe8f3 !important;
+      color: #1e293b !important;
+    }
+
+    /* ألوان النصوص والأيقونات في الوضع النهاري */
     html[data-theme="light"] .text-white,
     html[data-theme="light"] .text-slate-100,
-    html[data-theme="light"] .text-slate-200,
-    html[data-theme="light"] .text-slate-300 { color: #0f172a !important; }
+    html[data-theme="light"] .text-slate-200 {
+      color: #0f172a !important;
+    }
+    html[data-theme="light"] .text-slate-300 { color: #1e293b !important; }
     html[data-theme="light"] .text-slate-400 { color: #475569 !important; }
+    html[data-theme="light"] .text-slate-500 { color: #64748b !important; }
+
+    /* تصحيح الألوان الفاتحة لتكون مقروءة بوضوح على الخلفية النهارية */
+    html[data-theme="light"] .text-sky-300,
+    html[data-theme="light"] .text-sky-400 { color: #0369a1 !important; }
+    html[data-theme="light"] .text-cyan-300,
+    html[data-theme="light"] .text-cyan-400 { color: #0e7490 !important; }
+    html[data-theme="light"] .text-emerald-300,
+    html[data-theme="light"] .text-emerald-400 { color: #047857 !important; }
+    html[data-theme="light"] .text-teal-300,
+    html[data-theme="light"] .text-teal-400 { color: #0f766e !important; }
+    html[data-theme="light"] .text-amber-200,
+    html[data-theme="light"] .text-amber-300,
+    html[data-theme="light"] .text-amber-400 { color: #b45309 !important; }
+    html[data-theme="light"] .text-rose-300,
+    html[data-theme="light"] .text-rose-400 { color: #be123c !important; }
+    html[data-theme="light"] .text-indigo-200,
+    html[data-theme="light"] .text-indigo-300 { color: #4338ca !important; }
+    html[data-theme="light"] .text-purple-300,
+    html[data-theme="light"] .text-purple-400 { color: #6d28d9 !important; }
+
+    /* تحويل الشارات الغامقة إلى ألوان باستيل ناعمة */
+    html[data-theme="light"] .bg-sky-950,
+    html[data-theme="light"] .bg-sky-950\/30 { background-color: #e0f2fe !important; border-color: #7dd3fc !important; }
+    html[data-theme="light"] .bg-emerald-950,
+    html[data-theme="light"] .bg-emerald-950\/70,
+    html[data-theme="light"] .bg-emerald-950\/30,
+    html[data-theme="light"] .bg-emerald-950\/20 { background-color: #d1fae5 !important; border-color: #6ee7b7 !important; }
+    html[data-theme="light"] .bg-amber-950,
+    html[data-theme="light"] .bg-amber-950\/90,
+    html[data-theme="light"] .bg-amber-950\/30,
+    html[data-theme="light"] .bg-amber-950\/20 { background-color: #fef3c7 !important; border-color: #fcd34d !important; }
+    html[data-theme="light"] .bg-rose-950,
+    html[data-theme="light"] .bg-rose-950\/70,
+    html[data-theme="light"] .bg-rose-950\/20 { background-color: #ffe4e6 !important; border-color: #fda4af !important; }
+    html[data-theme="light"] .bg-indigo-950 { background-color: #e0e7ff !important; border-color: #a5b4fc !important; }
+    html[data-theme="light"] .bg-purple-950 { background-color: #f3e8ff !important; border-color: #d8b4fe !important; }
+    html[data-theme="light"] .bg-teal-950 { background-color: #ccfbf1 !important; border-color: #5eead4 !important; }
+    html[data-theme="light"] .bg-blue-950 { background-color: #dbeafe !important; border-color: #93c5fd !important; }
+
+    /* الحفاظ على النص والأيقونات باللون الأبيض داخل الأزرار والشارات الملونة */
+    html[data-theme="light"] .bg-sky-600,
+    html[data-theme="light"] .bg-sky-700,
+    html[data-theme="light"] .bg-emerald-600,
+    html[data-theme="light"] .bg-rose-600,
+    html[data-theme="light"] .bg-rose-700,
+    html[data-theme="light"] .bg-rose-800,
+    html[data-theme="light"] .bg-indigo-600,
+    html[data-theme="light"] .bg-indigo-700,
+    html[data-theme="light"] .bg-indigo-900,
+    html[data-theme="light"] .bg-purple-500,
+    html[data-theme="light"] .bg-purple-600,
+    html[data-theme="light"] .bg-purple-700,
+    html[data-theme="light"] .bg-teal-700,
+    html[data-theme="light"] .bg-teal-800,
+    html[data-theme="light"] .bg-cyan-800,
+    html[data-theme="light"] .bg-amber-600,
+    html[data-theme="light"] .bg-amber-700,
+    html[data-theme="light"] .bg-slate-700,
+    html[data-theme="light"] .from-sky-600 {
+      color: #ffffff !important;
+    }
+    html[data-theme="light"] .bg-sky-600 *,
+    html[data-theme="light"] .bg-sky-700 *,
+    html[data-theme="light"] .bg-emerald-600 *,
+    html[data-theme="light"] .bg-rose-600 *,
+    html[data-theme="light"] .bg-rose-700 *,
+    html[data-theme="light"] .bg-indigo-600 *,
+    html[data-theme="light"] .bg-indigo-700 *,
+    html[data-theme="light"] .bg-purple-600 *,
+    html[data-theme="light"] .bg-purple-700 *,
+    html[data-theme="light"] .bg-teal-700 *,
+    html[data-theme="light"] .bg-amber-600 *,
+    html[data-theme="light"] .from-sky-600 * {
+      color: #ffffff !important;
+    }
+
+    /* الأزرار الفاتحة يظل نصها داكناً لوضوح أعلى */
+    html[data-theme="light"] .bg-sky-500,
+    html[data-theme="light"] .bg-amber-500,
+    html[data-theme="light"] .bg-teal-500,
+    html[data-theme="light"] .bg-emerald-500,
+    html[data-theme="light"] .bg-cyan-500 {
+      color: #0f172a !important;
+    }
+
+    /* شريط التمرير في الوضع النهاري */
+    html[data-theme="light"] ::-webkit-scrollbar-track { background: #e5ecf4; }
+    html[data-theme="light"] ::-webkit-scrollbar-thumb { background: #94a3b8; }
+    html[data-theme="light"] ::-webkit-scrollbar-thumb:hover { background: #0284c7; }
 
     ::-webkit-scrollbar { width: 6px; height: 6px; }
     ::-webkit-scrollbar-track { background: var(--bg-input); }
@@ -670,6 +834,12 @@
       <div class="flex flex-wrap items-center justify-center gap-2">
         <button type="button" id="btnAdminPermissionsModal" onclick="openMasterPermissionsManagerModal()" class="hidden sys-btn bg-indigo-950 hover:bg-indigo-900 text-indigo-300 border border-indigo-700/60">
           <i data-lucide="shield" class="lucide-inline"></i><span>الصلاحيات</span>
+        </button>
+
+        <button type="button" id="btnAdminDirectCommentModal" onclick="openDirectCommentManagerModal()" class="hidden sys-btn bg-purple-950 hover:bg-purple-900 text-purple-300 border border-purple-700/60">
+          <i data-lucide="message-square-warning" class="lucide-inline"></i>
+          <span>كومنت ليوزر</span>
+          <span id="badgePendingDirectComments" class="hidden bg-amber-400 text-slate-950 px-1.5 py-0.2 rounded-full font-black text-[10px]">0</span>
         </button>
 
         <button type="button" id="btnMasterMaintToggle" onclick="toggleSystemMaintenanceMode()" class="hidden sys-btn bg-amber-950 hover:bg-amber-900 text-amber-300 border border-amber-700/60">
@@ -9685,5 +9855,445 @@
   };
 })();
 </script>
+
+  <!-- مودال إدارة وإرسال الكومنتات الإلزامية (لمدير النظام) -->
+  <div id="directCommentManagerModal" class="fixed inset-0 z-[160] bg-slate-950/90 backdrop-blur-md hidden items-center justify-center p-4 overflow-y-auto no-print">
+    <div class="sys-card border-purple-500/60 max-w-3xl w-full p-5 sm:p-6 space-y-4 my-6 text-slate-100">
+      <div class="flex items-center justify-between border-b border-slate-800 pb-3">
+        <div class="flex items-center gap-2.5">
+          <div class="w-9 h-9 rounded-xl bg-purple-500/15 border border-purple-500/40 text-purple-400 flex items-center justify-center">
+            <i data-lucide="message-square-warning" class="lucide-md"></i>
+          </div>
+          <div>
+            <h3 class="text-sm font-black text-white">إرسال كومنت إلزامي لمستخدم</h3>
+            <p class="text-[11px] text-slate-400">يظهر فور فتح المستخدم للبرنامج ولا يختفي إلا بعد إرسال رد</p>
+          </div>
+        </div>
+        <button type="button" onclick="closeDirectCommentManagerModal()" class="sys-btn-sm bg-slate-800 text-slate-400 hover:text-white">
+          <i data-lucide="x" class="lucide-inline"></i>
+        </button>
+      </div>
+
+      <div class="bg-slate-950 border border-slate-800 rounded-2xl p-4 space-y-3 text-xs">
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div>
+            <label class="block font-bold text-slate-300 mb-1">اختر المستخدم المستهدف *</label>
+            <select id="dcTargetUserSelect" class="sys-input w-full px-3 py-2 font-bold"></select>
+          </div>
+          <div>
+            <label class="block font-bold text-slate-300 mb-1">عنوان مختصر (اختياري)</label>
+            <input type="text" id="dcCommentTitle" placeholder="مثال: استفسار بخصوص موقع 5555DE" class="sys-input w-full px-3 py-2">
+          </div>
+        </div>
+        <div>
+          <label class="block font-bold text-amber-300 mb-1">نص الكومنت / التوجيه الإلزامي *</label>
+          <textarea id="dcCommentBody" rows="3" placeholder="اكتب رسالتك هنا... لن يتمكن المستخدم من إغلاق الشاشة إلا بعد الرد." class="sys-input w-full p-3 leading-relaxed"></textarea>
+        </div>
+        <div class="flex justify-end">
+          <button type="button" onclick="sendMandatoryUserComment()" class="sys-btn bg-purple-600 hover:bg-purple-500 text-white px-5">
+            <i data-lucide="send" class="lucide-inline"></i><span>إرسال الكومنت الإلزامي</span>
+          </button>
+        </div>
+      </div>
+
+      <div class="space-y-2">
+        <div class="flex items-center justify-between">
+          <h4 class="text-xs font-black text-white">سجل الكومنتات المرسلة والردود</h4>
+          <span id="dcHistoryCountBadge" class="text-[11px] text-slate-400 font-bold">0 رسالة</span>
+        </div>
+        <div id="dcHistoryList" class="space-y-2.5 max-h-72 overflow-y-auto pr-1"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- نافذة الكومنت الإلزامي التي تحجب الشاشة لدى المستخدم حتى يرد -->
+  <div id="mandatoryCommentBlockingModal" class="fixed inset-0 z-[260] bg-slate-950/95 backdrop-blur-xl hidden items-center justify-center p-4 no-print select-none" dir="rtl">
+    <div class="sys-card border-2 border-amber-500/80 max-w-lg w-full p-6 space-y-4 shadow-2xl">
+      <div class="flex items-center justify-between border-b border-slate-800 pb-3">
+        <div class="flex items-center gap-3">
+          <div class="w-11 h-11 rounded-2xl bg-amber-500/20 border border-amber-500/50 text-amber-400 flex items-center justify-center shrink-0">
+            <i data-lucide="message-square-warning" class="lucide-lg"></i>
+          </div>
+          <div>
+            <span class="inline-block px-2 py-0.5 rounded-full text-[10px] font-black bg-amber-500 text-slate-950">توجيه إداري يتطلب الرد</span>
+            <h3 id="mcModalTitle" class="text-sm font-black text-white mt-1">رسالة من الإدارة</h3>
+          </div>
+        </div>
+        <span id="mcQueueCounter" class="hidden px-2.5 py-1 rounded-full text-[10px] font-black bg-slate-800 text-amber-300 border border-amber-500/40">1 / 1</span>
+      </div>
+
+      <div class="bg-slate-950 border border-slate-800 rounded-2xl p-4 space-y-2 text-xs">
+        <div class="flex items-center justify-between text-[11px] text-slate-400 border-b border-slate-800/80 pb-2">
+          <span>المرسل: <strong id="mcSenderName" class="text-sky-400">-</strong></span>
+          <span id="mcSentDate" class="font-mono">-</span>
+        </div>
+        <p id="mcMessageBody" class="text-sm font-bold text-white leading-relaxed whitespace-pre-wrap pt-1"></p>
+      </div>
+
+      <div class="space-y-2 text-xs">
+        <label class="block font-black text-emerald-400">ردك على الكومنت (إلزامي لمتابعة العمل على النظام) *</label>
+        <textarea id="mcReplyInput" rows="3" placeholder="اكتب ردك بوضوح هنا..." class="sys-input w-full p-3 leading-relaxed select-text"></textarea>
+        <p id="mcReplyError" class="hidden text-[11px] text-rose-400 font-bold">يرجى كتابة رد واضح أولاً لإغلاق هذه الرسالة.</p>
+      </div>
+
+      <button type="button" id="btnSubmitMandatoryReply" onclick="submitMandatoryCommentReply()" class="sys-btn w-full h-11 bg-emerald-600 hover:bg-emerald-500 text-white text-sm shadow-lg">
+        <i data-lucide="send" class="lucide-inline"></i><span>إرسال الرد وفتح النظام</span>
+      </button>
+    </div>
+  </div>
+
+  <script>
+  (function initThemeAndMandatoryCommentsModule() {
+    "use strict";
+
+    const ADMIN_EMAILS = ["yasser.awad.systel@gmail.com", "yasser.awad.systel@gmail.co"];
+    const COLLECTION_NAME = "mandatory_user_comments";
+
+    let userPendingComments = [];
+    let allSentComments = [];
+    let unsubUserComments = null;
+    let unsubAdminComments = null;
+    let activeWatchedUserId = null;
+
+    function esc(s) {
+      return String(s ?? '')
+        .replace(/&/g, '&amp;').replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+    }
+
+    function isAdminUser() {
+      const em = String(window.currentUser?.email || '').toLowerCase().trim();
+      if (ADMIN_EMAILS.includes(em)) return true;
+      return !!(window.currentUser?.permissions?.canManageUsers);
+    }
+
+    function refreshLucide() {
+      if (window.lucide && typeof window.lucide.createIcons === 'function') {
+        window.lucide.createIcons();
+      }
+    }
+
+    // 1) تهيئة وتبديل الوضع النهاري / الليلي وتحديث الأيقونة
+    function applyThemeState(theme) {
+      const mode = theme === 'light' ? 'light' : 'dark';
+      document.documentElement.setAttribute('data-theme', mode);
+      localStorage.setItem('syscon_theme_mode', mode);
+
+      const metaTheme = document.querySelector('meta[name="theme-color"]');
+      if (metaTheme) metaTheme.setAttribute('content', mode === 'light' ? '#e5ecf4' : '#070d19');
+
+      const iconEl = document.getElementById('themeModeIcon');
+      if (iconEl) {
+        iconEl.setAttribute('data-lucide', mode === 'light' ? 'moon' : 'sun');
+        refreshLucide();
+      }
+    }
+
+    window.toggleColorThemeMode = function() {
+      const cur = document.documentElement.getAttribute('data-theme') || 'dark';
+      applyThemeState(cur === 'light' ? 'dark' : 'light');
+    };
+
+    applyThemeState(localStorage.getItem('syscon_theme_mode') || 'dark');
+
+    // 2) نظام الكومنت الإلزامي (تحديث لحظي عبر Firestore)
+    function stopCommentListeners() {
+      if (typeof unsubUserComments === 'function') { unsubUserComments(); unsubUserComments = null; }
+      if (typeof unsubAdminComments === 'function') { unsubAdminComments(); unsubAdminComments = null; }
+      userPendingComments = [];
+      allSentComments = [];
+      hideBlockingModal();
+    }
+
+    function bindCommentListenersForCurrentUser() {
+      if (typeof db === 'undefined' || !window.currentUser || !window.currentUser.id) return;
+
+      const myId = String(window.currentUser.id).trim();
+      const myEmail = String(window.currentUser.email || '').toLowerCase().trim();
+
+      const adminBtn = document.getElementById('btnAdminDirectCommentModal');
+      if (adminBtn) {
+        const show = isAdminUser();
+        adminBtn.classList.toggle('hidden', !show);
+        adminBtn.style.setProperty('display', show ? 'inline-flex' : 'none', 'important');
+      }
+
+      unsubUserComments = db.collection(COLLECTION_NAME)
+        .where("status", "==", "pending")
+        .onSnapshot(snap => {
+          const list = [];
+          snap.forEach(doc => {
+            const d = doc.data();
+            const matchId = myId && String(d.targetUserId || '').trim() === myId;
+            const matchEm = myEmail && String(d.targetEmail || '').toLowerCase().trim() === myEmail;
+            if (matchId || matchEm) list.push({ id: doc.id, ...d });
+          });
+          list.sort((a, b) => (a.createdAt || 0) - (b.createdAt || 0));
+          userPendingComments = list;
+          renderBlockingModal();
+        }, () => {});
+
+      if (isAdminUser()) {
+        unsubAdminComments = db.collection(COLLECTION_NAME)
+          .orderBy("createdAt", "desc")
+          .limit(60)
+          .onSnapshot(snap => {
+            const arr = [];
+            snap.forEach(doc => arr.push({ id: doc.id, ...doc.data() }));
+            allSentComments = arr;
+            updateAdminCommentsBadge();
+            if (!document.getElementById('directCommentManagerModal')?.classList.contains('hidden')) {
+              renderDirectCommentsHistory();
+            }
+          }, () => {});
+      }
+    }
+
+    setInterval(() => {
+      const uid = window.currentUser?.id || null;
+      if (uid && uid !== activeWatchedUserId) {
+        activeWatchedUserId = uid;
+        stopCommentListeners();
+        bindCommentListenersForCurrentUser();
+      } else if (!uid && activeWatchedUserId) {
+        activeWatchedUserId = null;
+        stopCommentListeners();
+      }
+    }, 1200);
+
+    document.addEventListener('keydown', (e) => {
+      const modal = document.getElementById('mandatoryCommentBlockingModal');
+      if (e.key === 'Escape' && modal && !modal.classList.contains('hidden')) {
+        e.preventDefault();
+        e.stopPropagation();
+      }
+    }, true);
+
+    function hideBlockingModal() {
+      const modal = document.getElementById('mandatoryCommentBlockingModal');
+      if (!modal) return;
+      modal.classList.add('hidden');
+      modal.classList.remove('flex');
+      document.body.style.overflow = '';
+    }
+
+    function renderBlockingModal() {
+      const modal = document.getElementById('mandatoryCommentBlockingModal');
+      if (!modal) return;
+
+      if (!window.currentUser?.id || userPendingComments.length === 0) {
+        hideBlockingModal();
+        return;
+      }
+
+      const active = userPendingComments[0];
+      document.getElementById('mcModalTitle').textContent = active.title || 'رسالة هامة من الإدارة';
+      document.getElementById('mcSenderName').textContent = active.senderName || 'مدير النظام';
+      document.getElementById('mcSentDate').textContent = active.createdAtStr || '-';
+      document.getElementById('mcMessageBody').textContent = active.message || '';
+
+      const counter = document.getElementById('mcQueueCounter');
+      if (counter) {
+        if (userPendingComments.length > 1) {
+          counter.textContent = `1 / ${userPendingComments.length}`;
+          counter.classList.remove('hidden');
+        } else {
+          counter.classList.add('hidden');
+        }
+      }
+
+      document.getElementById('mcReplyError')?.classList.add('hidden');
+      modal.classList.remove('hidden');
+      modal.classList.add('flex');
+      document.body.style.overflow = 'hidden';
+      refreshLucide();
+    }
+
+    window.submitMandatoryCommentReply = async function() {
+      if (userPendingComments.length === 0) return;
+      const active = userPendingComments[0];
+      const inp = document.getElementById('mcReplyInput');
+      const err = document.getElementById('mcReplyError');
+      const btn = document.getElementById('btnSubmitMandatoryReply');
+      const replyText = (inp?.value || '').trim();
+
+      if (replyText.length < 2) {
+        err?.classList.remove('hidden');
+        inp?.focus();
+        return;
+      }
+
+      err?.classList.add('hidden');
+      if (btn) btn.disabled = true;
+
+      const now = new Date();
+      const dateStr = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')} - ${now.toLocaleDateString('en-GB')}`;
+
+      try {
+        await db.collection(COLLECTION_NAME).doc(active.id).update({
+          status: 'replied',
+          replyText,
+          repliedByName: window.currentUser.name || '-',
+          repliedAt: Date.now(),
+          repliedAtStr: dateStr
+        });
+
+        await db.collection("engineer_notifications").add({
+          targetUserId: active.senderId || '',
+          recipientId: active.senderId || '',
+          targetEmail: String(active.senderEmail || '').toLowerCase().trim(),
+          targetName: active.senderName || 'مدير النظام',
+          siteName: active.title || 'رد على كومنت إلزامي',
+          actionTitle: 'رد على كومنت إلزامي',
+          message: `ردّ (${window.currentUser.name || 'المستخدم'}) على رسالتك: "${replyText}"`,
+          performedBy: window.currentUser.name || '-',
+          dateString: dateStr,
+          timestamp: Date.now(),
+          isRead: false
+        }).catch(() => {});
+
+        if (inp) inp.value = '';
+      } catch (e) {
+        alert('تعذر إرسال الرد، حاول مرة أخرى: ' + e.message);
+      } finally {
+        if (btn) btn.disabled = false;
+      }
+    };
+
+    // 3) نافذة الإرسال والمتابعة لمدير النظام
+    function updateAdminCommentsBadge() {
+      const badge = document.getElementById('badgePendingDirectComments');
+      if (!badge) return;
+      const pendCnt = allSentComments.filter(c => c.status === 'pending').length;
+      badge.textContent = pendCnt;
+      badge.classList.toggle('hidden', pendCnt === 0);
+    }
+
+    function populateTargetUsersDropdown() {
+      const sel = document.getElementById('dcTargetUserSelect');
+      if (!sel) return;
+      const users = (window.cachedUsersList || [])
+        .filter(u => !u.isSystemConfigDoc && u.id !== window.currentUser?.id)
+        .sort((a, b) => String(a.name || '').localeCompare(String(b.name || ''), 'ar'));
+
+      sel.innerHTML = `<option value="">-- اختر المستخدم --</option>` + users.map(u => {
+        const name = u.name || u.fullName || u.email || '-';
+        const title = u.jobTitle || u.role || '';
+        return `<option value="${esc(u.id)}" data-email="${esc(u.email || '')}" data-name="${esc(name)}">${esc(name)} (${esc(title)})</option>`;
+      }).join('');
+    }
+
+    function renderDirectCommentsHistory() {
+      const listEl = document.getElementById('dcHistoryList');
+      const cntEl = document.getElementById('dcHistoryCountBadge');
+      if (!listEl) return;
+
+      if (cntEl) cntEl.textContent = `${allSentComments.length} رسالة`;
+      if (allSentComments.length === 0) {
+        listEl.innerHTML = `<div class="text-center py-6 text-slate-500 text-xs font-bold">لا توجد كومنتات مرسلة حتى الآن.</div>`;
+        return;
+      }
+
+      listEl.innerHTML = allSentComments.map(c => {
+        const isReplied = c.status === 'replied';
+        return `
+          <div class="p-3.5 rounded-xl border ${isReplied ? 'bg-slate-950/60 border-emerald-500/40' : 'bg-slate-950 border-amber-500/50'} space-y-2 text-xs">
+            <div class="flex flex-wrap items-center justify-between gap-2">
+              <div class="flex items-center gap-2">
+                <span class="font-black text-white">${esc(c.targetName || '-')}</span>
+                <span class="px-2 py-0.5 rounded-full text-[10px] font-black ${isReplied ? 'bg-emerald-950 text-emerald-300 border border-emerald-700' : 'bg-amber-950 text-amber-300 border border-amber-600'}">
+                  ${isReplied ? 'تم الرد ✓' : 'بانتظار الرد'}
+                </span>
+              </div>
+              <div class="flex items-center gap-2">
+                <span class="text-[10px] text-slate-400 font-mono">${esc(c.createdAtStr || '-')}</span>
+                <button type="button" onclick="deleteMandatoryComment('${esc(c.id)}')" class="text-rose-400 hover:text-rose-300 cursor-pointer" title="حذف">
+                  <i data-lucide="trash-2" class="lucide-inline"></i>
+                </button>
+              </div>
+            </div>
+            ${c.title ? `<div class="text-[11px] font-bold text-sky-400">${esc(c.title)}</div>` : ''}
+            <div class="text-slate-200 leading-relaxed whitespace-pre-wrap">${esc(c.message || '')}</div>
+            ${isReplied ? `
+              <div class="mt-2 p-2.5 rounded-lg bg-emerald-950/30 border border-emerald-700/50 space-y-1">
+                <div class="flex items-center justify-between text-[10px] text-emerald-400 font-bold">
+                  <span>رد المستخدم (${esc(c.repliedByName || c.targetName || '-')}):</span>
+                  <span class="font-mono">${esc(c.repliedAtStr || '-')}</span>
+                </div>
+                <div class="text-white font-bold whitespace-pre-wrap">${esc(c.replyText || '')}</div>
+              </div>
+            ` : ''}
+          </div>
+        `;
+      }).join('');
+      refreshLucide();
+    }
+
+    window.openDirectCommentManagerModal = function() {
+      if (!isAdminUser()) return alert('غير مصرح لك بهذه الميزة.');
+      populateTargetUsersDropdown();
+      renderDirectCommentsHistory();
+      const m = document.getElementById('directCommentManagerModal');
+      m.classList.remove('hidden');
+      m.classList.add('flex');
+      refreshLucide();
+    };
+
+    window.closeDirectCommentManagerModal = function() {
+      const m = document.getElementById('directCommentManagerModal');
+      m.classList.add('hidden');
+      m.classList.remove('flex');
+    };
+
+    window.sendMandatoryUserComment = async function() {
+      if (!isAdminUser()) return alert('غير مصرح.');
+      const sel = document.getElementById('dcTargetUserSelect');
+      const targetId = sel?.value || '';
+      const opt = sel?.options[sel.selectedIndex];
+      const targetEmail = opt?.getAttribute('data-email') || '';
+      const targetName = opt?.getAttribute('data-name') || '';
+      const title = (document.getElementById('dcCommentTitle')?.value || '').trim();
+      const message = (document.getElementById('dcCommentBody')?.value || '').trim();
+
+      if (!targetId) return alert('يرجى اختيار المستخدم المستهدف.');
+      if (!message) return alert('يرجى كتابة نص الكومنت أولاً.');
+
+      const now = new Date();
+      const dateStr = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')} - ${now.toLocaleDateString('en-GB')}`;
+
+      try {
+        await db.collection(COLLECTION_NAME).add({
+          targetUserId: targetId,
+          targetEmail: targetEmail.toLowerCase().trim(),
+          targetName,
+          title: title || 'توجيه إداري هام',
+          message,
+          senderId: window.currentUser.id || '',
+          senderEmail: String(window.currentUser.email || '').toLowerCase().trim(),
+          senderName: `${window.currentUser.name || 'مدير النظام'} (${window.currentUser.jobTitle || ''})`,
+          status: 'pending',
+          replyText: '',
+          createdAt: Date.now(),
+          createdAtStr: dateStr
+        });
+
+        document.getElementById('dcCommentTitle').value = '';
+        document.getElementById('dcCommentBody').value = '';
+        alert(`تم إرسال الكومنت الإلزامي إلى (${targetName}) بنجاح، وسيظهر له فور فتح الشاشة.`);
+      } catch (e) {
+        alert('خطأ أثناء الإرسال: ' + e.message);
+      }
+    };
+
+    window.deleteMandatoryComment = async function(docId) {
+      if (!isAdminUser() || !confirm('حذف هذا الكومنت من السجل؟')) return;
+      try {
+        await db.collection(COLLECTION_NAME).doc(docId).delete();
+      } catch (e) {
+        alert('تعذر الحذف: ' + e.message);
+      }
+    };
+  })();
+  </script>
 </body>
 </html>
