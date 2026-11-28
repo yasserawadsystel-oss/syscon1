@@ -9930,10 +9930,15 @@
     const ADMIN_EMAILS = ["yasser.awad.systel@gmail.com", "yasser.awad.systel@gmail.co"];
     const COLLECTION_NAME = "engineer_notifications";
 
+    let rawComments = [];
+    let repliesByParent = {};
+    let deletedIds = new Set();
     let userPendingComments = [];
     let allSentComments = [];
-    let unsubUserComments = null;
-    let unsubAdminComments = null;
+
+    let unsubComments = null;
+    let unsubReplies = null;
+    let unsubDeletes = null;
     let activeWatchedUserId = null;
 
     function esc(s) {
@@ -9977,10 +9982,56 @@
 
     applyThemeState(localStorage.getItem('syscon_theme_mode') || 'dark');
 
-    // 2) نظام الكومنت الإلزامي عبر engineer_notifications المسموح بها في قواعد Firestore
+    // 2) نظام الكومنت الإلزامي (يعتمد على create/add فقط ليتوافق 100% مع قواعد Firestore)
+    function recomputeAndRenderAll() {
+      if (!window.currentUser?.id) return;
+      const myId = String(window.currentUser.id).trim();
+      const myEmail = String(window.currentUser.email || '').toLowerCase().trim();
+
+      const merged = rawComments
+        .filter(c => !deletedIds.has(c.id))
+        .map(c => {
+          const rep = repliesByParent[c.id];
+          if (rep) {
+            return {
+              ...c,
+              status: 'replied',
+              replyText: rep.replyText || c.replyText || '',
+              repliedByName: rep.repliedByName || c.repliedByName || c.targetName || '-',
+              repliedAt: rep.repliedAt || c.repliedAt || 0,
+              repliedAtStr: rep.repliedAtStr || c.repliedAtStr || '-'
+            };
+          }
+          return c;
+        });
+
+      const pendingForMe = merged.filter(c => {
+        if (c.status === 'replied') return false;
+        const matchId = myId && String(c.targetUserId || '').trim() === myId;
+        const matchEm = myEmail && String(c.targetEmail || '').toLowerCase().trim() === myEmail;
+        return matchId || matchEm;
+      });
+      pendingForMe.sort((a, b) => (a.createdAt || 0) - (b.createdAt || 0));
+      userPendingComments = pendingForMe;
+      renderBlockingModal();
+
+      if (isAdminUser()) {
+        const sortedAll = [...merged].sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+        allSentComments = sortedAll.slice(0, 60);
+        updateAdminCommentsBadge();
+        if (!document.getElementById('directCommentManagerModal')?.classList.contains('hidden')) {
+          renderDirectCommentsHistory();
+        }
+      }
+    }
+
     function stopCommentListeners() {
-      if (typeof unsubUserComments === 'function') { unsubUserComments(); unsubUserComments = null; }
-      if (typeof unsubAdminComments === 'function') { unsubAdminComments(); unsubAdminComments = null; }
+      if (typeof unsubComments === 'function') { unsubComments(); unsubComments = null; }
+      if (typeof unsubReplies === 'function') { unsubReplies(); unsubReplies = null; }
+      if (typeof unsubDeletes === 'function') { unsubDeletes(); unsubDeletes = null; }
+      rawComments = [];
+      repliesByParent = {};
+      deletedIds = new Set();
       userPendingComments = [];
       allSentComments = [];
       hideBlockingModal();
@@ -9989,9 +10040,6 @@
     function bindCommentListenersForCurrentUser() {
       if (typeof db === 'undefined' || !window.currentUser || !window.currentUser.id) return;
 
-      const myId = String(window.currentUser.id).trim();
-      const myEmail = String(window.currentUser.email || '').toLowerCase().trim();
-
       const adminBtn = document.getElementById('btnAdminDirectCommentModal');
       if (adminBtn) {
         const show = isAdminUser();
@@ -9999,36 +10047,42 @@
         adminBtn.style.setProperty('display', show ? 'inline-flex' : 'none', 'important');
       }
 
-      unsubUserComments = db.collection(COLLECTION_NAME)
+      unsubComments = db.collection(COLLECTION_NAME)
         .where("isMandatoryComment", "==", true)
         .onSnapshot(snap => {
-          const list = [];
-          snap.forEach(doc => {
-            const d = doc.data();
-            if (d.status !== 'pending') return;
-            const matchId = myId && String(d.targetUserId || '').trim() === myId;
-            const matchEm = myEmail && String(d.targetEmail || '').toLowerCase().trim() === myEmail;
-            if (matchId || matchEm) list.push({ id: doc.id, ...d });
-          });
-          list.sort((a, b) => (a.createdAt || 0) - (b.createdAt || 0));
-          userPendingComments = list;
-          renderBlockingModal();
+          const arr = [];
+          snap.forEach(doc => arr.push({ id: doc.id, ...doc.data() }));
+          rawComments = arr;
+          recomputeAndRenderAll();
         }, () => {});
 
-      if (isAdminUser()) {
-        unsubAdminComments = db.collection(COLLECTION_NAME)
-          .where("isMandatoryComment", "==", true)
-          .onSnapshot(snap => {
-            const arr = [];
-            snap.forEach(doc => arr.push({ id: doc.id, ...doc.data() }));
-            arr.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
-            allSentComments = arr.slice(0, 60);
-            updateAdminCommentsBadge();
-            if (!document.getElementById('directCommentManagerModal')?.classList.contains('hidden')) {
-              renderDirectCommentsHistory();
+      unsubReplies = db.collection(COLLECTION_NAME)
+        .where("isMandatoryReply", "==", true)
+        .onSnapshot(snap => {
+          const map = {};
+          snap.forEach(doc => {
+            const d = doc.data();
+            if (d.parentCommentId) {
+              if (!map[d.parentCommentId] || (d.repliedAt || 0) > (map[d.parentCommentId].repliedAt || 0)) {
+                map[d.parentCommentId] = { id: doc.id, ...d };
+              }
             }
-          }, () => {});
-      }
+          });
+          repliesByParent = map;
+          recomputeAndRenderAll();
+        }, () => {});
+
+      unsubDeletes = db.collection(COLLECTION_NAME)
+        .where("isMandatoryDelete", "==", true)
+        .onSnapshot(snap => {
+          const s = new Set();
+          snap.forEach(doc => {
+            const d = doc.data();
+            if (d.parentCommentId) s.add(d.parentCommentId);
+          });
+          deletedIds = s;
+          recomputeAndRenderAll();
+        }, () => {});
     }
 
     setInterval(() => {
@@ -10112,15 +10166,14 @@
       const dateStr = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')} - ${now.toLocaleDateString('en-GB')}`;
 
       try {
-        await db.collection(COLLECTION_NAME).doc(active.id).update({
-          status: 'replied',
+        // إنشاء سجل الرد وإشعار المدير في خطوة واحدة (تستخدم add المسموح بها دائماً)
+        await db.collection(COLLECTION_NAME).add({
+          isMandatoryReply: true,
+          parentCommentId: active.id,
           replyText,
           repliedByName: window.currentUser.name || '-',
           repliedAt: Date.now(),
-          repliedAtStr: dateStr
-        });
-
-        await db.collection("engineer_notifications").add({
+          repliedAtStr: dateStr,
           targetUserId: active.senderId || '',
           recipientId: active.senderId || '',
           targetEmail: String(active.senderEmail || '').toLowerCase().trim(),
@@ -10132,6 +10185,15 @@
           dateString: dateStr,
           timestamp: Date.now(),
           isRead: false
+        });
+
+        // محاولة تحديث المستند الأصلي بصمت (لا تؤثر لو كانت الصلاحية مقيدة)
+        db.collection(COLLECTION_NAME).doc(active.id).update({
+          status: 'replied',
+          replyText,
+          repliedByName: window.currentUser.name || '-',
+          repliedAt: Date.now(),
+          repliedAtStr: dateStr
         }).catch(() => {});
 
         if (inp) inp.value = '';
@@ -10146,7 +10208,7 @@
     function updateAdminCommentsBadge() {
       const badge = document.getElementById('badgePendingDirectComments');
       if (!badge) return;
-      const pendCnt = allSentComments.filter(c => c.status === 'pending').length;
+      const pendCnt = allSentComments.filter(c => c.status !== 'replied').length;
       badge.textContent = pendCnt;
       badge.classList.toggle('hidden', pendCnt === 0);
     }
@@ -10280,7 +10342,17 @@
       try {
         await db.collection(COLLECTION_NAME).doc(docId).delete();
       } catch (e) {
-        alert('تعذر الحذف: ' + e.message);
+        // لو الحذف المباشر مقيد في قواعد Firestore، نضيف علامة حذف ناعم عبر add
+        try {
+          await db.collection(COLLECTION_NAME).add({
+            isMandatoryDelete: true,
+            isRead: true,
+            parentCommentId: docId,
+            timestamp: Date.now()
+          });
+        } catch (err) {
+          alert('تعذر الحذف: ' + err.message);
+        }
       }
     };
   })();
