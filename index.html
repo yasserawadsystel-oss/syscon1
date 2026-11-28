@@ -90,8 +90,6 @@
       background-color: #e5ecf4 !important;
       color: #0f172a !important;
     }
-
-    /* الهيدر وشريط التنقل السفلي والبطاقات */
     html[data-theme="light"] header {
       background-color: rgba(248, 250, 253, 0.96) !important;
       border-bottom-color: #cbd5e1 !important;
@@ -109,8 +107,6 @@
     html[data-theme="light"] .sys-card:hover {
       border-color: rgba(2, 132, 199, 0.45) !important;
     }
-
-    /* الخلفيات الداكنة العامة تتحول لدرجات هادئة ومريحة */
     html[data-theme="light"] .bg-slate-950,
     html[data-theme="light"] .bg-slate-950\/95,
     html[data-theme="light"] .bg-slate-950\/90,
@@ -120,7 +116,6 @@
       background-color: #eaf0f7 !important;
       color: #0f172a !important;
     }
-    /* الإبقاء على خلفية التعتيم الخلفية للمودالات */
     html[data-theme="light"] .fixed.inset-0.bg-slate-950\/85,
     html[data-theme="light"] .fixed.inset-0.bg-slate-950\/90,
     html[data-theme="light"] .fixed.inset-0.bg-slate-950\/95 {
@@ -143,8 +138,6 @@
     html[data-theme="light"] .hover\:bg-slate-700:hover {
       background-color: #cbd7e6 !important;
     }
-
-    /* الجداول والمدخلات والحدود */
     html[data-theme="light"] .sys-input {
       background-color: #ffffff !important;
       border-color: #cbd5e1 !important;
@@ -163,8 +156,6 @@
       background-color: #dfe8f3 !important;
       color: #1e293b !important;
     }
-
-    /* ألوان النصوص والأيقونات في الوضع النهاري */
     html[data-theme="light"] .text-white,
     html[data-theme="light"] .text-slate-100,
     html[data-theme="light"] .text-slate-200 {
@@ -173,8 +164,6 @@
     html[data-theme="light"] .text-slate-300 { color: #1e293b !important; }
     html[data-theme="light"] .text-slate-400 { color: #475569 !important; }
     html[data-theme="light"] .text-slate-500 { color: #64748b !important; }
-
-    /* تصحيح الألوان الفاتحة لتكون مقروءة بوضوح على الخلفية النهارية */
     html[data-theme="light"] .text-sky-300,
     html[data-theme="light"] .text-sky-400 { color: #0369a1 !important; }
     html[data-theme="light"] .text-cyan-300,
@@ -192,8 +181,6 @@
     html[data-theme="light"] .text-indigo-300 { color: #4338ca !important; }
     html[data-theme="light"] .text-purple-300,
     html[data-theme="light"] .text-purple-400 { color: #6d28d9 !important; }
-
-    /* تحويل الشارات الغامقة إلى ألوان باستيل ناعمة */
     html[data-theme="light"] .bg-sky-950,
     html[data-theme="light"] .bg-sky-950\/30 { background-color: #e0f2fe !important; border-color: #7dd3fc !important; }
     html[data-theme="light"] .bg-emerald-950,
@@ -211,8 +198,6 @@
     html[data-theme="light"] .bg-purple-950 { background-color: #f3e8ff !important; border-color: #d8b4fe !important; }
     html[data-theme="light"] .bg-teal-950 { background-color: #ccfbf1 !important; border-color: #5eead4 !important; }
     html[data-theme="light"] .bg-blue-950 { background-color: #dbeafe !important; border-color: #93c5fd !important; }
-
-    /* الحفاظ على النص والأيقونات باللون الأبيض داخل الأزرار والشارات الملونة */
     html[data-theme="light"] .bg-sky-600,
     html[data-theme="light"] .bg-sky-700,
     html[data-theme="light"] .bg-emerald-600,
@@ -248,8 +233,6 @@
     html[data-theme="light"] .from-sky-600 * {
       color: #ffffff !important;
     }
-
-    /* الأزرار الفاتحة يظل نصها داكناً لوضوح أعلى */
     html[data-theme="light"] .bg-sky-500,
     html[data-theme="light"] .bg-amber-500,
     html[data-theme="light"] .bg-teal-500,
@@ -257,8 +240,6 @@
     html[data-theme="light"] .bg-cyan-500 {
       color: #0f172a !important;
     }
-
-    /* شريط التمرير في الوضع النهاري */
     html[data-theme="light"] ::-webkit-scrollbar-track { background: #e5ecf4; }
     html[data-theme="light"] ::-webkit-scrollbar-thumb { background: #94a3b8; }
     html[data-theme="light"] ::-webkit-scrollbar-thumb:hover { background: #0284c7; }
@@ -9947,7 +9928,7 @@
     "use strict";
 
     const ADMIN_EMAILS = ["yasser.awad.systel@gmail.com", "yasser.awad.systel@gmail.co"];
-    const COLLECTION_NAME = "mandatory_user_comments";
+    const COLLECTION_NAME = "engineer_notifications";
 
     let userPendingComments = [];
     let allSentComments = [];
@@ -9996,7 +9977,7 @@
 
     applyThemeState(localStorage.getItem('syscon_theme_mode') || 'dark');
 
-    // 2) نظام الكومنت الإلزامي (تحديث لحظي عبر Firestore)
+    // 2) نظام الكومنت الإلزامي عبر engineer_notifications المسموح بها في قواعد Firestore
     function stopCommentListeners() {
       if (typeof unsubUserComments === 'function') { unsubUserComments(); unsubUserComments = null; }
       if (typeof unsubAdminComments === 'function') { unsubAdminComments(); unsubAdminComments = null; }
@@ -10019,11 +10000,12 @@
       }
 
       unsubUserComments = db.collection(COLLECTION_NAME)
-        .where("status", "==", "pending")
+        .where("isMandatoryComment", "==", true)
         .onSnapshot(snap => {
           const list = [];
           snap.forEach(doc => {
             const d = doc.data();
+            if (d.status !== 'pending') return;
             const matchId = myId && String(d.targetUserId || '').trim() === myId;
             const matchEm = myEmail && String(d.targetEmail || '').toLowerCase().trim() === myEmail;
             if (matchId || matchEm) list.push({ id: doc.id, ...d });
@@ -10035,12 +10017,12 @@
 
       if (isAdminUser()) {
         unsubAdminComments = db.collection(COLLECTION_NAME)
-          .orderBy("createdAt", "desc")
-          .limit(60)
+          .where("isMandatoryComment", "==", true)
           .onSnapshot(snap => {
             const arr = [];
             snap.forEach(doc => arr.push({ id: doc.id, ...doc.data() }));
-            allSentComments = arr;
+            arr.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+            allSentComments = arr.slice(0, 60);
             updateAdminCommentsBadge();
             if (!document.getElementById('directCommentManagerModal')?.classList.contains('hidden')) {
               renderDirectCommentsHistory();
@@ -10263,7 +10245,15 @@
 
       try {
         await db.collection(COLLECTION_NAME).add({
+          isMandatoryComment: true,
+          isRead: true,
+          actionTitle: title || 'توجيه إداري هام',
+          siteName: title || 'توجيه إداري هام',
+          performedBy: `${window.currentUser.name || 'مدير النظام'} (${window.currentUser.jobTitle || ''})`,
+          dateString: dateStr,
+          timestamp: Date.now(),
           targetUserId: targetId,
+          recipientId: targetId,
           targetEmail: targetEmail.toLowerCase().trim(),
           targetName,
           title: title || 'توجيه إداري هام',
